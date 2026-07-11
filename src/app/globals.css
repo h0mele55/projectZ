@@ -10,7 +10,7 @@
 @import '../styles/tokens.css';
 
 /* ──────────────────────────────────────────────────────────────────
- * Legacy Inflect color aliases.
+ * Legacy color aliases (from the inflect-compliance port).
  *
  * These `--bg-primary` / `--text-primary` / `--brand` names predate
  * the Epic 51 semantic token system in `src/styles/tokens.css`. They
@@ -91,7 +91,7 @@ body {
  * drawn inward. Paired with an "elegant" border (base border tinted with a
  * touch of brand) and a top inner-highlight hairline (glass edge) over the
  * drop shadow. Resolves per-theme via the --bg-default / --brand-default /
- * --border-default tokens, so one class serves METRO dark + PwC light.
+ * --border-default tokens, so one class serves dark + light.
  */
 .surface-popup-texture {
   /* Focal glow drawn toward the top — the eye enters a pop-up from its
