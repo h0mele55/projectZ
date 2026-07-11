@@ -1,4 +1,4 @@
-name: "playerz.bg CodeQL config"
+name: 'playerz.bg CodeQL config'
 
 # Pin the scope explicitly rather than relying on autodetection — that
 # mismatch is what produces the "configuration error" banner in the
@@ -12,6 +12,12 @@ paths-ignore:
   - coverage
   - playwright-report
   - test-results
-  - "**/*.test.ts"
-  - "**/*.test.tsx"
-  - "**/*.spec.ts"
+  # The whole test tree, not just *.test.ts. Test *helpers* stub browser
+  # APIs (ResizeObserver, matchMedia, Pointer Capture); when CodeQL reads
+  # those stubs it resolves production call sites against them and reports
+  # false positives in src/. Scaffolding must not shape SAST's view of the
+  # real code.
+  - tests
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'

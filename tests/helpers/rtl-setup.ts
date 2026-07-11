@@ -40,11 +40,18 @@ if (!window.matchMedia) {
 }
 
 if (!global.ResizeObserver) {
-  global.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
+  // The constructor MUST declare its callback parameter. An anonymous class
+  // with a default (zero-arg) constructor makes CodeQL resolve every
+  // `new ResizeObserver(cb)` in src/ to *this* stub and report the callback
+  // as a "superfluous trailing argument" — three false-positive alerts on
+  // production files. Test scaffolding must not redefine the shape of a
+  // real DOM API.
+  global.ResizeObserver = class implements ResizeObserver {
+    constructor(_callback: ResizeObserverCallback) {}
+    observe(_target: Element, _options?: ResizeObserverOptions) {}
+    unobserve(_target: Element) {}
     disconnect() {}
-  } as unknown as typeof ResizeObserver;
+  };
 }
 
 // jsdom has no Pointer Capture API. `vaul` (the drawer behind Modal /
