@@ -1,0 +1,36 @@
+# Alternate ports + isolated volumes so `npm run test:int` can TRUNCATE
+# freely without ever touching the dev stack.
+services:
+  postgres-test:
+    image: postgres:16
+    container_name: playerz-test-postgres
+    environment:
+      POSTGRES_USER: playerz
+      POSTGRES_PASSWORD: playerz
+      POSTGRES_DB: playerz_test
+    ports:
+      - '55432:5432'
+    volumes:
+      - playerz-test-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U playerz -d playerz_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-test:
+    image: redis:7
+    container_name: playerz-test-redis
+    ports:
+      - '63790:6379'
+    volumes:
+      - playerz-test-redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  playerz-test-pgdata:
+  playerz-test-redisdata:
