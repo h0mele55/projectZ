@@ -1,2 +1,7 @@
+# Prefer the project's binaries. A stale global eslint on PATH (v6 was
+# observed on a dev box) resolves ahead of the local v9 otherwise and
+# dies with "couldn't find a configuration file" against our flat config.
+export PATH="$PWD/node_modules/.bin:$PATH"
+
 npx lint-staged
 bash scripts/detect-secrets.sh
