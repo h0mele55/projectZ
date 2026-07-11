@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: playerz-dev-postgres
+    environment:
+      POSTGRES_USER: playerz
+      POSTGRES_PASSWORD: playerz
+      POSTGRES_DB: playerz
+    ports:
+      - '5432:5432'
+    volumes:
+      - playerz-dev-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U playerz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: playerz-dev-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - playerz-dev-redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: playerz-dev-mailhog
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+    healthcheck:
+      test: ['CMD', 'sh', '-c', 'nc -z localhost 8025']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  playerz-dev-pgdata:
+  playerz-dev-redisdata:
