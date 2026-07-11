@@ -1,0 +1,47 @@
+name: "Setup Node + Prisma client"
+description: >-
+  Sets up Node.js (with npm cache), runs `npm ci`, and generates the
+  Prisma client. Both installs retry with backoff so a transient
+  registry ECONNRESET or a flaky `prisma generate` codegen crash never
+  fails an otherwise-green job. Ported from inflect-compliance.
+
+inputs:
+  node-version:
+    description: "Node.js major version. Defaults to 24."
+    required: false
+    default: "24"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          if npm ci; then exit 0; fi
+          echo "::warning::npm ci failed (attempt ${attempt}/3) — retrying"
+          sleep $((attempt * 10))
+        done
+        exit 1
+
+    - name: Generate Prisma client
+      shell: bash
+      # Prisma has no schema until P04 — tolerate its absence so the
+      # action is usable from the first scaffold PR onward.
+      run: |
+        if [ ! -d prisma/schema ] && [ ! -f prisma/schema.prisma ]; then
+          echo "No Prisma schema yet — skipping generate."
+          exit 0
+        fi
+        for attempt in 1 2 3; do
+          if ./node_modules/.bin/prisma generate; then exit 0; fi
+          echo "::warning::prisma generate failed (attempt ${attempt}/3) — retrying"
+          sleep 5
+        done
+        exit 1

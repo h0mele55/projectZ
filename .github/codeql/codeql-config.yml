@@ -1,0 +1,17 @@
+name: "playerz.bg CodeQL config"
+
+# Pin the scope explicitly rather than relying on autodetection — that
+# mismatch is what produces the "configuration error" banner in the
+# Security tab.
+queries:
+  - uses: security-and-quality
+
+paths-ignore:
+  - node_modules
+  - .next
+  - coverage
+  - playwright-report
+  - test-results
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/*.spec.ts"
