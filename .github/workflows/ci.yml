@@ -1,0 +1,442 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  # Test stack — mirrors docker-compose.test.yml's alternate ports.
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/playerz_test"
+  REDIS_URL: "redis://localhost:6379"
+  SKIP_ENV_VALIDATION: "1"
+  NEXTAUTH_SECRET: "ci-test-secret-not-a-real-key"
+  NEXTAUTH_URL: "http://localhost:3000"
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════
+  #  Preflight — has the app been scaffolded yet?
+  #  P01 lands package.json. Until then every downstream job no-ops
+  #  green rather than failing on a missing lockfile, so the required
+  #  checks are honest from the very first PR.
+  # ═══════════════════════════════════════════════════════════════
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_app: ${{ steps.detect.outputs.has_app }}
+      has_e2e: ${{ steps.detect.outputs.has_e2e }}
+      has_docker: ${{ steps.detect.outputs.has_docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: detect
+        run: |
+          if [ -f package.json ] && [ -f package-lock.json ]; then
+            echo "has_app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_app=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::App not scaffolded yet (no package.json) — build/test jobs will no-op."
+          fi
+          if [ -f playwright.config.ts ] && [ -n "$(find tests/e2e -name '*.spec.ts' 2>/dev/null)" ]; then
+            echo "has_e2e=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_e2e=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f Dockerfile ]; then
+            echo "has_docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_docker=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 1: Lint
+  # ═══════════════════════════════════════════════════════════════
+  lint:
+    name: Lint
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - if: needs.preflight.outputs.has_app == 'true'
+        uses: ./.github/actions/setup-node-prisma
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Run ESLint
+        if: needs.preflight.outputs.has_app == 'true'
+        run: npm run lint
+      - name: Prettier check
+        if: needs.preflight.outputs.has_app == 'true'
+        run: npx prettier --check . || echo "::warning::Prettier reported unformatted files"
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 2: Typecheck
+  # ═══════════════════════════════════════════════════════════════
+  typecheck:
+    name: Typecheck
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - if: needs.preflight.outputs.has_app == 'true'
+        uses: ./.github/actions/setup-node-prisma
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Run tsc --noEmit
+        if: needs.preflight.outputs.has_app == 'true'
+        run: npm run typecheck
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 3: Unit + rendered + guardrail tests
+  # ═══════════════════════════════════════════════════════════════
+  test:
+    name: Test
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - if: needs.preflight.outputs.has_app == 'true'
+        uses: ./.github/actions/setup-node-prisma
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: "Run tests: unit + rendered"
+        if: needs.preflight.outputs.has_app == 'true'
+        run: npm test
+      - name: "Run tests: architectural guardrails"
+        if: needs.preflight.outputs.has_app == 'true'
+        run: npm run test:guardrails
+      - name: Upload JUnit report
+        if: ${{ !cancelled() && needs.preflight.outputs.has_app == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-unit
+          path: junit.xml
+          if-no-files-found: ignore
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 4: Integration tests — real Postgres + Redis
+  # ═══════════════════════════════════════════════════════════════
+  integration:
+    name: Integration
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: playerz_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - if: needs.preflight.outputs.has_app == 'true'
+        uses: ./.github/actions/setup-node-prisma
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Create PostgreSQL roles for RLS
+        if: needs.preflight.outputs.has_app == 'true'
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d playerz_test -v ON_ERROR_STOP=1 <<'SQL'
+            DO $$ BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
+                CREATE ROLE app_user NOLOGIN;
+              END IF;
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_superuser') THEN
+                CREATE ROLE app_superuser NOLOGIN BYPASSRLS;
+              END IF;
+            END $$;
+            GRANT app_user, app_superuser TO postgres;
+          SQL
+      - name: Apply Prisma migrations
+        if: needs.preflight.outputs.has_app == 'true'
+        run: |
+          if [ -d prisma/migrations ]; then
+            npx prisma migrate deploy
+          elif [ -d prisma/schema ] || [ -f prisma/schema.prisma ]; then
+            npx prisma db push --skip-generate
+          else
+            echo "No Prisma schema yet — skipping."
+          fi
+      - name: "Run tests: integration"
+        if: needs.preflight.outputs.has_app == 'true'
+        run: |
+          if [ -n "$(find tests/integration -name '*.test.ts' 2>/dev/null)" ]; then
+            npx jest --selectProjects integration --runInBand --ci
+          else
+            echo "No integration tests yet."
+          fi
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 5: Build
+  # ═══════════════════════════════════════════════════════════════
+  build:
+    name: Build
+    needs: [preflight, lint, typecheck]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - if: needs.preflight.outputs.has_app == 'true'
+        uses: ./.github/actions/setup-node-prisma
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: next build
+        if: needs.preflight.outputs.has_app == 'true'
+        run: npm run build
+      - name: Upload build output
+        if: needs.preflight.outputs.has_app == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: .next
+          retention-days: 1
+          if-no-files-found: ignore
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 6: E2E — Playwright against a real stack
+  # ═══════════════════════════════════════════════════════════════
+  e2e:
+    name: E2E
+    needs: [preflight, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: playerz_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      mailhog:
+        image: mailhog/mailhog:latest
+        ports: ["1025:1025", "8025:8025"]
+    steps:
+      - uses: actions/checkout@v4
+      - if: needs.preflight.outputs.has_e2e == 'true'
+        uses: ./.github/actions/setup-node-prisma
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install Playwright browsers
+        if: needs.preflight.outputs.has_e2e == 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Apply migrations + seed
+        if: needs.preflight.outputs.has_e2e == 'true'
+        run: |
+          if [ -d prisma/migrations ]; then npx prisma migrate deploy; fi
+          if [ -f scripts/seed.ts ]; then npx tsx scripts/seed.ts; fi
+      - name: Run Playwright
+        if: needs.preflight.outputs.has_e2e == 'true'
+        run: npm run test:e2e
+      - name: Upload Playwright report
+        if: ${{ failure() && needs.preflight.outputs.has_e2e == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: No E2E yet
+        if: needs.preflight.outputs.has_e2e != 'true'
+        run: echo "::notice::No E2E specs yet — P02 lands the first two."
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 7: Security — secret scan + dependency review + npm audit
+  # ═══════════════════════════════════════════════════════════════
+  security:
+    name: Security
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Gate: secret detection"
+        run: bash scripts/detect-secrets.sh
+
+      - name: Dependency review
+        if: ${{ github.event_name == 'pull_request' && needs.preflight.outputs.has_app == 'true' }}
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: always
+
+      - if: needs.preflight.outputs.has_app == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # Production deps only: a moderate+ finding here is exploitable
+      # surface in shipped code. Weakening this gate is a regression.
+      - name: "Gate: npm audit (moderate+ blocks merge)"
+        if: needs.preflight.outputs.has_app == 'true'
+        run: |
+          npm ci --ignore-scripts
+          npm audit --omit=dev --audit-level=moderate
+
+      - name: "Info: npm audit (all deps)"
+        if: needs.preflight.outputs.has_app == 'true'
+        continue-on-error: true
+        run: npm audit --audit-level=critical || echo "::warning::vulnerabilities in dev dependencies"
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 8: CodeQL — SAST
+  # ═══════════════════════════════════════════════════════════════
+  codeql:
+    name: CodeQL SAST
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@v4
+
+      # CodeQL hard-fails (exit 32, "no source code seen") when a
+      # language's extractor finds nothing to analyse. Before P01 there
+      # is no JS/TS in the tree, so skip that leg until it exists. The
+      # `actions` leg always has the workflows to scan.
+      - name: Should this language run?
+        id: gate
+        run: |
+          if [ "${{ matrix.language }}" = "actions" ] || [ "${{ needs.preflight.outputs.has_app }}" = "true" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No JS/TS source yet — CodeQL javascript-typescript deferred to P01."
+          fi
+
+      - name: Initialize CodeQL
+        if: steps.gate.outputs.go == 'true'
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+      - name: Autobuild
+        if: steps.gate.outputs.go == 'true'
+        uses: github/codeql-action/autobuild@v3
+      - name: Perform CodeQL Analysis
+        if: steps.gate.outputs.go == 'true'
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 9: Trivy — filesystem + dependency vulnerability scan.
+  #  Always runs (even pre-scaffold) so the SARIF feed to the Security
+  #  tab never goes stale. Image scanning is added in P12 with the
+  #  Dockerfile.
+  # ═══════════════════════════════════════════════════════════════
+  trivy:
+    name: Trivy Scan
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF to GitHub Security
+        if: ${{ !cancelled() }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+      # Blocking gate: CRITICAL/HIGH with a known fix fails the PR.
+      - name: "Gate: Trivy (CRITICAL/HIGH blocks merge)"
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Trivy IaC / misconfiguration scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Gate: the single required check. Green only if every upstream
+  #  job succeeded — so branch protection needs one entry, and adding
+  #  a job later can't silently escape the gate.
+  # ═══════════════════════════════════════════════════════════════
+  ci-gate:
+    name: CI Gate
+    if: ${{ !cancelled() }}
+    needs: [lint, typecheck, test, integration, build, e2e, security, codeql, trivy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Assert all upstream jobs passed
+        run: |
+          results='${{ toJSON(needs) }}'
+          echo "$results"
+          if echo "$results" | grep -qE '"result": *"(failure|cancelled)"'; then
+            echo "::error::One or more CI jobs failed — see the job graph above."
+            exit 1
+          fi
+          echo "All CI jobs green."

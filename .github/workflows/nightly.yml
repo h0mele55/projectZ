@@ -1,0 +1,119 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/playerz_test"
+  REDIS_URL: "redis://localhost:6379"
+  SKIP_ENV_VALIDATION: "1"
+  NEXTAUTH_SECRET: "ci-test-secret-not-a-real-key"
+  NEXTAUTH_URL: "http://localhost:3000"
+
+jobs:
+  # Full cross-browser E2E — chromium runs per-PR, firefox only here,
+  # so a slow browser never gates a merge.
+  e2e-full:
+    name: "E2E (${{ matrix.browser }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: playerz_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+      mailhog:
+        image: mailhog/mailhog:latest
+        ports: ["1025:1025", "8025:8025"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bail if not scaffolded
+        id: gate
+        run: |
+          if [ -f package.json ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "go=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.gate.outputs.go == 'true'
+        uses: ./.github/actions/setup-node-prisma
+      - if: steps.gate.outputs.go == 'true'
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - if: steps.gate.outputs.go == 'true'
+        run: |
+          if [ -d prisma/migrations ]; then npx prisma migrate deploy; fi
+          if [ -f scripts/seed.ts ]; then npx tsx scripts/seed.ts; fi
+      - if: steps.gate.outputs.go == 'true'
+        run: npx playwright test --project=${{ matrix.browser }}
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: playwright-report/
+          if-no-files-found: ignore
+
+  # Visual regression against the P02 baseline screenshots.
+  visual-regression:
+    name: Visual Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        run: |
+          if [ -n "$(find tests/e2e -name '*-dark.spec.ts' 2>/dev/null)" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.gate.outputs.go == 'true'
+        uses: ./.github/actions/setup-node-prisma
+      - if: steps.gate.outputs.go == 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.gate.outputs.go == 'true'
+        run: npx playwright test --grep @visual
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diff
+          path: test-results/
+          if-no-files-found: ignore
+
+  trivy-full:
+    name: Trivy (full, incl. unfixed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan (all severities)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-nightly.sarif
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+          ignore-unfixed: false
+      - uses: github/codeql-action/upload-sarif@v3
+        if: ${{ !cancelled() }}
+        with:
+          sarif_file: trivy-nightly.sarif
+          category: trivy-nightly
