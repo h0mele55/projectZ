@@ -322,6 +322,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════
   codeql:
     name: CodeQL SAST
+    needs: [preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -334,14 +335,32 @@ jobs:
         language: [javascript-typescript, actions]
     steps:
       - uses: actions/checkout@v4
+
+      # CodeQL hard-fails (exit 32, "no source code seen") when a
+      # language's extractor finds nothing to analyse. Before P01 there
+      # is no JS/TS in the tree, so skip that leg until it exists. The
+      # `actions` leg always has the workflows to scan.
+      - name: Should this language run?
+        id: gate
+        run: |
+          if [ "${{ matrix.language }}" = "actions" ] || [ "${{ needs.preflight.outputs.has_app }}" = "true" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No JS/TS source yet — CodeQL javascript-typescript deferred to P01."
+          fi
+
       - name: Initialize CodeQL
+        if: steps.gate.outputs.go == 'true'
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
       - name: Autobuild
+        if: steps.gate.outputs.go == 'true'
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
+        if: steps.gate.outputs.go == 'true'
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
@@ -364,7 +383,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Trivy filesystem scan (SARIF)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -382,7 +401,7 @@ jobs:
 
       # Blocking gate: CRITICAL/HIGH with a known fix fails the PR.
       - name: "Gate: Trivy (CRITICAL/HIGH blocks merge)"
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -392,7 +411,7 @@ jobs:
           exit-code: "1"
 
       - name: Trivy IaC / misconfiguration scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: .
