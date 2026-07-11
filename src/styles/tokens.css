@@ -1,0 +1,1038 @@
+/*
+ * Design Token Foundation — Inflect Compliance
+ *
+ * Semantic CSS custom properties that all components target instead of
+ * raw Tailwind color utilities. The Tailwind config maps these tokens
+ * to utility classes like bg-bg-default, text-content-emphasis, etc.
+ *
+ * Both themes are live:
+ *   - Dark (default, Inflect glassmorphism) under `:root`
+ *   - Light under `[data-theme="light"]` — toggleable via
+ *     `ThemeProvider` / the sidebar theme toggle, persisted in
+ *     localStorage, and picked up from `prefers-color-scheme` on the
+ *     first visit. Add a new token to `:root` only when you also add
+ *     the light counterpart here; the light-mode parity guardrail at
+ *     `tests/guardrails/light-mode-parity.test.ts` enforces this.
+ *
+ * Palette origin: Tailwind Slate + Indigo (brand).
+ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   DARK THEME (default) — playerz.bg palette.
+
+   playerz green (#22C55E) on near-black surfaces. Status colors
+   kept as conventional emerald/amber/red/blue so semantic meaning is
+   preserved across themes.
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── Surfaces ──────────────────────────────────────────────────── */
+  --bg-page: #0d110e; /* near-black, faint green — app/page background */
+  --bg-default: #141813; /* raised charcoal — cards, panels, tables, modals, popovers */
+  --bg-muted: #1b201b; /* hover surfaces, pressed/active states */
+  --bg-subtle: rgba(
+    52,
+    213,
+    127,
+    0.08
+  ); /* green @ 8% — selection bg, disabled surfaces, faint tints */
+  --bg-elevated: #232922; /* lifted charcoal — tooltips, dropdowns above default */
+  --bg-inverted: #22c55e; /* playerz green — inverted surface (primary button bg) */
+  --bg-overlay: rgba(0, 12, 26, 0.7); /* dark navy backdrop behind modals/drawers */
+
+  /* ── Content / Text ────────────────────────────────────────────── */
+  /*
+   * GAP-CI-77: bumped `--content-muted` and `--content-subtle` so
+   * small text on `--bg-default` (#141813 charcoal cards) clears WCAG AA
+   * 4.5:1. The previous values (#95B0C9, #6B85A0) gave 4.31:1 and
+   * 2.80:1 respectively — small body text (`text-xs`, 12px) at those
+   * tiers fails axe-core's color-contrast rule. The new values
+   * preserve the tier hierarchy (muted > subtle) while sitting above
+   * the AA threshold on every dark surface in use.
+   */
+  --content-emphasis: #f2f3ee; /* soft off-white — headings, selected items, bold labels */
+  --content-default: #eaebe4; /* body text, table cells, default content (14.5:1 on bg-default) */
+  --content-muted: #b9bcb2; /* secondary text, placeholders, captions (AA, 9.0:1 on bg-default) */
+  --content-subtle: #8c8f86; /* disabled text, hints, tertiary info (AA, 5.3:1 on bg-default) */
+  --content-inverted: #04120a; /* near-black — text on green/inverted surfaces (6.5:1 on brand-emphasis) */
+
+  /* ── Borders / Dividers ────────────────────────────────────────── */
+  --border-default: #2e332c; /* standard borders */
+  --border-subtle: rgba(255, 255, 255, 0.1); /* soft dividers, card edges */
+  --border-emphasis: #454b42; /* focused inputs, emphasized outlines */
+
+  /* ── Process canvas (Roadmap-27) ───────────────────────────────────
+   * A dedicated surface ramp for the node-based Processes editor. The
+   * canvas plane is the DEEPEST surface — a recessed "work pit"; the
+   * frame chrome sits above it; nodes are the brightest, most elevated
+   * objects. Tonal separation does the work, not hue noise — every
+   * value stays inside the playerz charcoal family.
+   *   depth ramp (dark → light): surface < page < frame < node. */
+  --canvas-surface: #05121f; /* recessed work plane — deepest */
+  --canvas-frame: #0a2138; /* workspace frame + chrome strips */
+  --canvas-grid: rgba(127, 167, 215, 0.1); /* dot grid — faint cool light */
+  --canvas-edge: #335e86; /* default connection stroke (R27-PR-B) */
+  --canvas-node: #123a60; /* node fill — elevated flow card */
+  --canvas-node-muted: #0d2a45; /* node fill — context (quieter) */
+  --canvas-border: rgba(127, 167, 215, 0.2); /* hairline inside the workspace */
+  --canvas-shadow:
+    0 8px 20px -10px rgba(0, 0, 0, 0.7), 0 1px 2px rgba(0, 0, 0, 0.45); /* elevated-node lift */
+  --canvas-recess: inset 0 11px 20px -16px rgba(0, 0, 0, 0.9); /* top inner shadow — plane reads sunk below the chrome */
+
+  /* ── Brand / Primary (playerz green) ───────────────────────────── */
+  --brand-default: #22c55e; /* playerz green — brand accent, links (dark) */
+  --brand-emphasis: #16a34a; /* deeper green — primary buttons, active brand */
+  --brand-muted: #4ade80; /* lighter green — hover accent */
+  --brand-subtle: rgba(34, 197, 94, 0.18); /* green @ 18% — brand tint backgrounds */
+
+  /* ── Brand / Secondary (electric blue — complementary cool counterpoint) ──
+   *
+   * Roadmap-13 introduces a SECONDARY brand colour so the sidebar
+   * (and any future chrome that wants a two-tone state vocabulary)
+   * can express ACTIVE in a tone distinct from HOVER. On playerz the
+   * page surface is itself near-black (#0D110E / #141813), so a charcoal
+   * accent would dissolve into the background. The cool counterpoint
+   * to playerz's warm yellow is therefore a vivid electric blue —
+   * `#3B82F6` (Tailwind blue-500). It clears 4.5:1 against both
+   * `--bg-default` (#141813) and `--bg-page` (#0D110E), so any
+   * primitive that paints a band, ring, or text in this token reads
+   * clearly on every dark surface in the app.
+   *
+   * Hue choice: blue-500 sits 180° opposite playerz yellow on the
+   * colour wheel — true complementary contrast, not "another warm".
+   * The eye reads HOVER (yellow) vs ACTIVE (blue) as deliberate
+   * state vocabulary, not accidental drift between brand tones.
+   */
+  --brand-secondary-default: #14b8a6; /* teal — secondary brand, complementary to playerz green */
+  --brand-secondary-emphasis: #0d9488; /* deeper teal — primary band stop, active surfaces */
+  --brand-secondary-muted: #2dd4bf; /* lighter teal — band highlight midstop, hover accent */
+  --brand-secondary-subtle: rgba(20, 184, 166, 0.18); /* teal @ 18% — secondary tint backgrounds */
+
+  /* ── Status: Success ───────────────────────────────────────────── */
+  --bg-success: rgba(16, 185, 129, 0.15); /* emerald-500 @ 15% — badge tint */
+  --bg-success-emphasis: #059669; /* emerald-600 — solid actionable surface (success buttons, indicator dots) */
+  --content-success: #34d399; /* emerald-400 */
+  --border-success: rgba(16, 185, 129, 0.3); /* emerald-500 @ 30% */
+
+  /* ── Status: Warning ───────────────────────────────────────────── */
+  --bg-warning: rgba(245, 158, 11, 0.15); /* amber-500 @ 15% — badge tint */
+  --bg-warning-emphasis: #d97706; /* amber-600 — solid actionable surface */
+  --content-warning: #fbbf24; /* amber-400 */
+  --border-warning: rgba(245, 158, 11, 0.3); /* amber-500 @ 30% */
+
+  /* ── Status: Error / Danger ────────────────────────────────────── */
+  --bg-error: rgba(239, 68, 68, 0.15); /* red-500 @ 15% — badge tint */
+  --bg-error-emphasis: #dc2626; /* red-600 — solid actionable surface (danger buttons, indicator dots) */
+  --content-error: #f87171; /* red-400 */
+  --border-error: rgba(239, 68, 68, 0.3); /* red-500 @ 30% */
+
+  /* ── Status: Info ──────────────────────────────────────────────── */
+  --bg-info: rgba(20, 184, 166, 0.15); /* blue-500 @ 15% — badge tint */
+  --bg-info-emphasis: #2563eb; /* blue-600 — solid actionable surface */
+  --content-info: #60a5fa; /* blue-400 */
+  --border-info: rgba(20, 184, 166, 0.3); /* blue-500 @ 30% */
+
+  /* ── Status: Attention (pending / needs-action) ────────────────── */
+  --bg-attention: rgba(251, 191, 36, 0.15); /* amber-400 @ 15% */
+  --content-attention: #fbbf24; /* amber-400 */
+  --border-attention: rgba(251, 191, 36, 0.3); /* amber-400 @ 30% */
+
+  /* ── Interactive / Focus ───────────────────────────────────────── */
+  --ring-default: rgba(34, 197, 94, 0.55); /* playerz yellow focus ring */
+  --focus-ring: rgba(34, 197, 94, 0.55); /* alias for components that use a different name */
+
+  /* shadcn / Radix compatibility tokens */
+  --ring: rgba(34, 197, 94, 0.55);
+  --ring-offset-background: #0d110e;
+  --primary: #22c55e;
+
+  /* ── Glass ─────────────────────────────────────────────────────── */
+  --glass-bg: rgba(0, 47, 95, 0.82); /* navy glass-card background */
+  --glass-border: rgba(0, 83, 140, 0.5); /* navy glass-card border */
+  --glass-blur: 12px; /* backdrop blur radius */
+
+  /* ── Radius ────────────────────────────────────────────────────── */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ───────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* ── Liquid-carbon button surface (Roadmap-19) ─────────────────────
+   * Buttons read as LIQUID CARBON — a deep, dark, voluminous
+   * surface, wet-looking but never a hard mirror shine. Think a
+   * pool of dark liquid graphite lit softly from above, not a
+   * matte slab and not glossy plastic. Three tokens, layered:
+   *
+   *   --btn-carbon-overlay — a SEMI-TRANSPARENT depth field
+   *     painted OVER the variant's base colour. NOT a flat
+   *     top-down ramp — a soft elliptical light POOL near the
+   *     top-centre (the meniscus catch-light), fading fast to a
+   *     near-nothing mid, then deepening to a dark pool at the
+   *     bottom. The radial pool is what reads as "liquid": light
+   *     gathers on a curved wet surface rather than washing the
+   *     whole face. The catch-light peaks at only 11% — present
+   *     enough to read as wet, restrained enough to never be
+   *     "shiny." Transparent so it composes over ANY variant.
+   *
+   *   --btn-carbon-bevel — the box-shadow that gives the surface
+   *     VOLUME. An inset SOFT top highlight (a 1px-spread inset,
+   *     not a hairline — liquid edges are soft) + a faint inset
+   *     bottom glow (the liquid's base catches bounce light) +
+   *     a tight outer drop so the pool sits on the page. Low-
+   *     contrast — volume is FELT, not announced.
+   *
+   *   --btn-carbon-border — the meniscus edge. A hair darker
+   *     than the surface so the silhouette is crisp, with a
+   *     whisper of luminosity so it reads as a liquid edge, not
+   *     a drawn outline. The "subtle border" from the brief.
+   *
+   * DARK theme values below; the LIGHT theme block carries its
+   * own (a liquid pool in light mode needs a deeper bottom pool
+   * + a crisper catch-light to read at all). */
+  --btn-carbon-overlay: radial-gradient(
+    ellipse 130% 80% at 50% -10%,
+    rgba(255, 255, 255, 0.11) 0%,
+    rgba(255, 255, 255, 0.02) 32%,
+    rgba(0, 0, 0, 0.1) 62%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  --btn-carbon-bevel:
+    inset 0 1px 1px rgba(255, 255, 255, 0.1), inset 0 -2px 3px rgba(255, 255, 255, 0.03),
+    0 1px 2px rgba(0, 0, 0, 0.38);
+  /* R22-PR-B — softened from α 0.30 → 0.18. R19's 30%-black
+   * meniscus edge read as "loud" against the carbon surface in
+   * R22 review — the silhouette competed with the iridescent
+   * edge instead of supporting it. 18% is the quiet anchor the
+   * iridescent + aura layers want underneath. */
+  --btn-carbon-border: rgba(0, 0, 0, 0.18);
+
+  /* --btn-carbon-grain (Roadmap-19 PR-C) — the micro-grain that
+   * gives the liquid-carbon surface TACTILITY. A grayscale
+   * fractal-noise tile painted as the TOP layer of every carbon
+   * ::before (above the light pool, still under the label). At
+   * 5% opacity it never reads as "texture you can see" — it
+   * reads as a surface that isn't a flat printed rectangle, the
+   * difference between a slab of graphite and a slab of plastic.
+   * Theme-agnostic — grayscale noise at 5% works identically on
+   * the dark + light variant fills, so it lives once in :root
+   * (no per-theme override). `stitchTiles='stitch'` keeps the
+   * 90px tile seamless when it repeats across a wide button. */
+  --btn-carbon-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.05'/%3E%3C/svg%3E");
+
+  /* ── R20 ambient elevation (4-stop, DARK theme) ─────────────────────
+   * R19 gave buttons a CARBON SURFACE — bevel, pool, grain — but the
+   * outer drop never changed. R20 splits the drop into a four-stop
+   * scale so a button has DISTINCT depth at rest, on hover, while
+   * pressed, and while focused. Layered ON TOP of the bevel's inset
+   * highlights (those are the volume FROM the inside) — ambient is
+   * the volume FROM the outside.
+   *
+   *   rest   — a quiet two-stop drop. Close & tight + a wider soft
+   *            halo. Says "this is on the page", not "this is
+   *            floating".
+   *   hover  — the same two-stop shape, lifted. The tight drop pulls
+   *            down 1px; the soft halo widens. Elegance is restraint:
+   *            we don't add NEW shadow stops on hover, we LIFT the
+   *            ones already there.
+   *   press  — collapses to one tight stop. The surface has been
+   *            pushed INTO the page; less light leaks out behind.
+   *   focus  — adds a 4px brand-tinted ring stop OUTSIDE the rest
+   *            drop. The two are stacked (focus ON TOP of rest), so
+   *            a focused button reads as "selected AND elevated".
+   *
+   * Why per-theme: shadow alphas need a different floor on light
+   * mode (a 24%-black drop on a near-white surface barely registers,
+   * whereas the same alpha on a near-black surface is too heavy).
+   * The LIGHT block carries the warm-tinted parallel. */
+  --btn-ambient-rest: 0 1px 2px rgba(0, 0, 0, 0.24), 0 2px 6px rgba(0, 0, 0, 0.16);
+  --btn-ambient-hover: 0 2px 4px rgba(0, 0, 0, 0.28), 0 6px 16px rgba(0, 0, 0, 0.22);
+  --btn-ambient-press: 0 1px 1px rgba(0, 0, 0, 0.32);
+  /* R22-PR-B — focus ring tightened from 4px → 3px. The 4px
+   * ring read as "default Tailwind focus" — generic. 3px matches
+   * the form-control `--ctrl-edge-focus` shape, so a focused
+   * button and a focused input now wear the EXACT same halo. */
+  --btn-ambient-focus:
+    0 0 0 3px rgba(34, 197, 94, 0.22), 0 1px 2px rgba(0, 0, 0, 0.24), 0 2px 6px rgba(0, 0, 0, 0.16);
+
+  /* ── R20 iridescent edge (DARK theme) ───────────────────────────────
+   * A linear gradient sweeping from a whisper of brand yellow in
+   * the top-left to a whisper of secondary blue in the bottom-right.
+   * Painted on the PRIMARY variant's `::after` pseudo as a
+   * `border-image` source (PR-B). The alphas are intentionally low —
+   * the edge reads as iridescent on close inspection, NEVER as a
+   * gradient outline. Static (no animation) — the iridescence is a
+   * material property, not a motion gimmick. */
+  --btn-iridescent-gradient: linear-gradient(
+    135deg,
+    rgba(34, 197, 94, 0.55) 0%,
+    rgba(34, 197, 94, 0.18) 35%,
+    rgba(20, 184, 166, 0.18) 65%,
+    rgba(20, 184, 166, 0.55) 100%
+  );
+
+  /* ── Primary action-button FILL gradient (DARK theme) ───────────────
+   * 2026-06-01. OPAQUE brand→secondary diagonal fill (135°): brand is
+   * dominant through the first 60%, ramping to the cool secondary only
+   * in the final stretch — a SUBTLE cool corner, not a half-and-half
+   * split. Distinct from `--btn-iridescent-gradient` (a low-alpha 1px
+   * EDGE finish): this is the solid body fill, so the white label stays
+   * crisp on top. (Reverted from the brief symmetric light-dark-light
+   * experiment; softened by pushing the secondary ramp 45%→60%.) */
+  /* UI-11: create-button gradient — brand holds the first half, then a SUBTLE
+     cool tail (softer/lighter blue, was the darker #3b82f6) so the far corner
+     isn't too dark. Transition starts at 50% ("after 1/2"), not 60%. */
+  --btn-gradient-primary: linear-gradient(
+    135deg,
+    var(--brand-default) 0%,
+    var(--brand-default) 50%,
+    #6ee7a8 100%
+  );
+
+  /* ── R20 aura wash (DARK theme) ─────────────────────────────────────
+   * The soft brand-tinted halo a primary button casts on hover, as a
+   * pre-composed multi-stop box-shadow string. THREE stops: a 1px
+   * inner ring (currently fully transparent — reserved for PR-B's
+   * iridescent edge ratchet to claim if needed), a tight inner glow
+   * (4px / 18px), and a soft outer bloom (12px / 36px). Brand-tinted
+   * for primary; cool-neutral for secondary. The OUTER bloom is what
+   * reads as "this button is warmly lit"; the inner glow gives the
+   * edge a haptic-feeling tightness.
+   *
+   * Consumed via `::after` (PR-B) so the hover lift composes with
+   * the existing carbon surface without colliding with R19's
+   * `::before` depth-overlay. */
+  --btn-aura-primary:
+    0 0 0 1px rgba(34, 197, 94, 0), 0 4px 18px rgba(34, 197, 94, 0.32),
+    0 12px 36px rgba(34, 197, 94, 0.14);
+  --btn-aura-neutral:
+    0 0 0 1px rgba(255, 255, 255, 0), 0 4px 18px rgba(255, 255, 255, 0.1),
+    0 12px 36px rgba(255, 255, 255, 0.06);
+
+  /* ── R20 form-control parity edge (DARK theme) ──────────────────────
+   * Form controls (Input, Combobox trigger, DatePicker trigger,
+   * Select) don't carbon-FILL — they're hollow surfaces. R20 brings
+   * them edge-level parity with the button carbon language: a quiet
+   * border at rest, an emphasised border on hover, an iridescent
+   * border + brand-tinted glow on focus. Three tokens drive the
+   * three states. Consumed by PR-B via `control-variants.ts`. */
+  --ctrl-edge-rest: rgba(255, 255, 255, 0.14);
+  --ctrl-edge-hover: rgba(255, 255, 255, 0.28);
+  /* R20-PR-D — enriched focus halo. The 3px brand ring (originally
+   * just the focus indicator) now also carries a 2-stop ambient
+   * drop so a focused control reads "warm AND raised" the way a
+   * focused button does. Same shape as the button's
+   * `--btn-ambient-focus`, minus the 4px outer brand ring (which
+   * --ctrl-edge-focus already provides at 3px). Gives form controls
+   * the same tactile-lift presence on focus that the button family
+   * wears. */
+  --ctrl-edge-focus:
+    0 0 0 3px rgba(34, 197, 94, 0.2), 0 1px 2px rgba(0, 0, 0, 0.24), 0 2px 6px rgba(0, 0, 0, 0.16);
+
+  /* ── R24 liquid-glass button material (DARK theme) ──────────────────
+   *
+   * R19–R22 built the SOLID/machined "carved carbon" button. R24 swaps
+   * the MATERIAL — from carbon to glass — while reusing the existing
+   * composition seams (R19's `::before` depth + R20's `::after` finish).
+   * Architecture lives at `src/components/ui/button-variants.ts`; this
+   * block ships the underlying token surface so the cva recipes have
+   * something to layer.
+   *
+   * External reference: callstack/liquid-glass. Portable techniques:
+   *   - alpha-tinted backdrop + `backdrop-filter: blur(...)` for the
+   *     translucent base
+   *   - 1px gradient edge-sheen for the meniscus catching light
+   *   - layered inner-glow + outer-rim composition
+   * NOT portable (and deliberately rejected for IC's web stack):
+   *   - SwiftUI / iOS Material API bridges
+   *   - native vibrancy rendering hooks
+   *   - React Native LiquidGlass wrapper
+   *
+   * Five tokens, one per layer of the glass material:
+   *
+   *   --btn-glass-tint — the alpha-tinted base FILL the surface paints.
+   *     Holds the translucent material colour. Dark theme uses cool
+   *     gray-white at low alpha so the underlying page tone shows
+   *     through; light theme inverts to a warm darker tint (defined in
+   *     the `:root.light` block below). Variants COMPOSE this with
+   *     their own colour (primary brand-tinted, secondary neutral,
+   *     destructive red-tinted) by stacking gradients in the cva.
+   *
+   *   --btn-glass-blur — the backdrop-filter blur radius. Restrained
+   *     by intent — 8px gives the surface a watery softness without
+   *     the visually noisy "ground-glass" feel of larger blurs.
+   *     Performance-bounded by PR-F's hardening pass (interactive
+   *     surfaces only; not list-row buttons).
+   *
+   *   --btn-glass-edge — the 1px gradient stroke painted via `::after`
+   *     mask-composite (replaces R20's `--btn-iridescent-gradient`
+   *     when the variant is glass-mode). Cooler tint than the carbon
+   *     iridescent so it reads as "light catching a glass edge" not
+   *     "rainbow finish". Top-left bright, bottom-right shadowed —
+   *     a directional cue that the glass has volume.
+   *
+   *   --btn-glass-inner — the inner highlight that appears on the top
+   *     edge of the glass (specular highlight where the surface meets
+   *     ambient light). 1px inset rgba-white at low alpha; lives in
+   *     the same `::before` shadow channel as R19's bevel.
+   *
+   *   --btn-glass-shadow — the outer drop that anchors the glass to
+   *     the page surface (so it doesn't read as "floating off"). Two
+   *     stops: a tight inner shadow + a soft outer bloom; lower alpha
+   *     than carbon because glass shouldn't cast a heavy shadow. */
+  /* R24-PR-B alpha calibration — the R24-PR-A defaults (tint 0.07,
+   * inner 0.12) tested too subtle on the dark playerz navy surface to
+   * read as glass at all. Bumped to the alpha range native OS
+   * vibrancy materials use (tint 0.18–0.28, inner highlight 0.28,
+   * blur 12px). The translucency now clearly communicates "glass
+   * surface" rather than "navy panel with a faint highlight". */
+  --btn-glass-tint: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  --btn-glass-blur: 12px;
+  --btn-glass-edge: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.16) 45%,
+    rgba(0, 0, 0, 0.18) 100%
+  );
+  --btn-glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(0, 0, 0, 0.24);
+
+  /* R24-hotfix — per-variant translucent fills (DARK theme).
+   * The R24-PR-B variant arrays painted OPAQUE brand colours on
+   * top of the glass tint, so the backdrop-blur had no transparent
+   * base to act on — visually the surface read as opaque navy /
+   * opaque brand-yellow, NOT as glass. The fix: drop the opaque
+   * variant `bg-*` classes from the cva and use per-variant TRANS-
+   * LUCENT fills here so brand identity survives BUT the surface
+   * stays translucent enough for backdrop-blur to register.
+   *
+   * Alpha 0.55 chosen to balance brand visibility (a primary button
+   * still reads as brand-coloured) with translucency (the page tone
+   * still leaks through the backdrop-blur). Lower alphas read as
+   * "ghost variant"; higher alphas dissolve back into opacity. */
+  /* B10 (2026-06-07): deepened from rgba(34, 197, 94,0.55). The brighter,
+   * more translucent yellow read as a pale wash in dark theme — a deeper,
+   * more saturated gold at higher alpha gives the create button real
+   * presence and pairs with the navy `text-content-inverted` label. */
+  --btn-glass-fill-primary: rgba(34, 197, 94, 0.85); /* playerz green */
+  --btn-glass-fill-secondary: rgba(35, 41, 34, 0.72); /* elevated charcoal */
+  --btn-glass-fill-destructive: rgba(220, 38, 38, 0.55);
+  --btn-glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.28), 0 6px 14px rgba(0, 0, 0, 0.18);
+
+  /* ── Transitions ───────────────────────────────────────────────── */
+  --duration-fast: 100ms;
+  --duration-default: 150ms;
+  --duration-slow: 300ms;
+
+  /* ── Sidebar band glow (R13-PR2) ───────────────────────────────── */
+  /*
+   * The 3-stop brand-gradient band on the `<NavItem>` casts a soft
+   * radial glow into the row surface. Hardcoded per theme because
+   * box-shadow's colour stop can't be derived from `--brand-default`
+   * via Tailwind's arbitrary-value syntax without `color-mix()`,
+   * which would inflate the class string for one token.
+   *
+   * playerz: playerz yellow @ 35% — visible against the deep navy bg
+   * without screaming. 6px blur is the sweet spot — wider feels
+   * smoky, narrower disappears at non-Retina rendering.
+   */
+  --nav-band-glow: 0 0 6px rgba(34, 197, 94, 0.35);
+
+  /* ── Sidebar band glow — ACTIVE variant (R13-PR4) ──────────────── */
+  /*
+   * When a NavItem is the current page, the band's gradient swaps
+   * from primary brand (yellow) to secondary brand (electric blue).
+   * The glow follows — same 6px blur radius, same 35% alpha, but
+   * tuned to the blue family so the aura around the band matches
+   * its stops. A mismatched glow (yellow around a blue band) would
+   * read as accidental colour bleed.
+   */
+  --nav-band-glow-active: 0 0 6px rgba(20, 184, 166, 0.35);
+
+  /* ── Sidebar gloss highlight (R13-PR6) ─────────────────────────── */
+  /*
+   * A 1-px wide top-edge `::after` line on `<NavItem>` rows reveals
+   * on hover + active. Simulates light catching the top edge of a
+   * raised button — the "glossy" cue the user asked for. On the
+   * deep-navy playerz surface a faint white at 8% is enough to read;
+   * the row appears to lift slightly toward the cursor without any
+   * actual geometry change.
+   */
+  --nav-gloss-highlight: rgba(255, 255, 255, 0.08);
+
+  /* ── Sidebar bevel shadow (R13-PR7) ────────────────────────────── */
+  /*
+   * A subtle inner shadow at the bottom edge of the row, applied on
+   * hover + active. Pairs with the `::after` top-edge highlight
+   * (R13-PR6) to create a faint two-edge bevel — the row reads as
+   * "slightly recessed", which is what gives clicks the "I'm
+   * pressing on a real button" feel.
+   *
+   * On playerz's deep-navy surface a dark-tinted inset (0.25 black)
+   * lands as a near-invisible bottom edge that the eye reads as
+   * subtle concavity. Heavier alpha would make the row look bruised;
+   * lighter would disappear entirely.
+   */
+  --nav-bevel-shadow: inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25);
+
+  /* R15-PR7 — `liquid sweep` brand-tint colour for the NavItem
+   * row's hover background. The hover paints a narrow diagonal
+   * gradient (`transparent → tint → transparent`) that sweeps
+   * across the row body once when hover engages. The tint at 14%
+   * alpha is muted enough to read as "a wash of light", not "a
+   * solid colour block". playerz uses the brand yellow at low
+   * opacity; playerz.bg uses the brand orange at a marginally higher
+   * opacity to compensate for the cream surface's lower
+   * contrast. Same alpha would make the orange disappear
+   * against cream.
+   */
+  --nav-row-liquid-tint: rgba(34, 197, 94, 0.14);
+
+  /* R15-PR9 — outer brand-coloured aura around the ACTIVE row.
+   * The active row's band already glows (R13-PR2 `--nav-band-
+   * glow`); this token extends a halo of the SECONDARY brand
+   * (navy on playerz) around the row's full perimeter at low
+   * alpha + soft blur. Semantically a brand-presence signal,
+   * NOT a depth shadow — it doesn't lift the row off the
+   * sidebar, it bathes the row in brand light.
+   *
+   * Alpha is low (18%) so the aura reads as ambient light
+   * rather than as an outline. Blur is 12px so the edges
+   * dissipate softly into the sidebar surface, no hard ring.
+   */
+  --nav-row-aura-color: rgba(20, 184, 166, 0.18);
+
+  /* ───────────────────────────────────────────────────────────────
+   * R16-PR1 — Lickable Chart palette + motion (playerz theme).
+   *
+   * Six-series palette covering the common dense-chart needs
+   * (donut, stacked bar, multi-line, radar, gantt). Each series
+   * has TWO stops — `start` (the saturated face) and `end` (the
+   * deepened tail). The pair becomes the SVG `<linearGradient>`
+   * stops 0% and 100% inside `<ChartGradient>` primitive (R16-PR2).
+   *
+   * Adjacent series are tuned so the end-stop of series-N falls
+   * within visual neighbourhood of the start-stop of series-N+1
+   * — this is what makes "the gradient where two colours meet"
+   * feel like a single fluid surface in stacked / donut shapes.
+   * The boundary between series-1 (yellow) and series-2 (cyan)
+   * runs through warm-grey-with-blue-tint; the boundary between
+   * series-3 (violet) and series-4 (coral) runs through warm-
+   * pink. Not adjacent-rainbow — adjacent-tonal.
+   *
+   * playerz palette emphasises saturated jewel tones against the
+   * deep-navy surface. playerz.bg counterparts (below) are restrained
+   * earth tones against cream. Same six families — different
+   * brightness curves.
+   * ─────────────────────────────────────────────────────────── */
+
+  /* Series 1 — primary brand (yellow). */
+  --chart-series-1-start: #22c55e;
+  --chart-series-1-end: #e0a800;
+
+  /* Series 2 — cyan / electric blue. Pairs with series-1 across
+   * a warm→cool transition. */
+  --chart-series-2-start: #06b6d4;
+  --chart-series-2-end: #0e7490;
+
+  /* Series 3 — violet. Pairs with series-2 across the
+   * cyan→indigo arc. */
+  --chart-series-3-start: #8b5cf6;
+  --chart-series-3-end: #6d28d9;
+
+  /* Series 4 — coral / hot pink. Bridges series-3 violet and
+   * series-5 emerald — sits in the warm-magenta neighbourhood. */
+  --chart-series-4-start: #f472b6;
+  --chart-series-4-end: #be185d;
+
+  /* Series 5 — emerald. The "growth" / "positive" tone in trends. */
+  --chart-series-5-start: #10b981;
+  --chart-series-5-end: #047857;
+
+  /* Series 6 — amber / warm orange. The "alert" / "due-soon"
+   * tone in trends. Closes the loop visually toward series-1
+   * (warm-yellow) so a 6-segment donut reads as a continuous
+   * colour wheel. */
+  --chart-series-6-start: #f59e0b;
+  --chart-series-6-end: #b45309;
+
+  /* Empty / disabled / projected series fill. Sits at low alpha
+   * over the surrounding bg so the segment reads as "data
+   * pending" without competing for attention. */
+  --chart-series-muted: rgba(148, 163, 184, 0.32);
+
+  /* Motion — hover-pop + gradient flow (R16-PR4 consumers).
+   * `hover-pop-distance` is the OUTWARD translation distance for
+   * a donut segment on hover (radial direction). `hover-lift` is
+   * the UPWARD translation for bar / area / focus-point lifts.
+   * Both are deliberately small — the user asked for "subtle"
+   * pop intensity, and small gives the eye a clear "this is the
+   * one you're pointing at" without making the chart feel jumpy.
+   *
+   * `flow-duration` is the period of the gradient stops migrating
+   * along the segment's axis on hover — long enough to read as a
+   * river of colour, short enough to complete inside a typical
+   * hover interaction. ease-in-out for both ends to land softly.
+   *
+   * `mount-duration` paces the initial path-draw on mount
+   * (LineChart in R16-PR7). 600ms keeps the draw deliberate
+   * without making the page feel slow. */
+  --chart-hover-pop-distance: 4px;
+  --chart-hover-lift: 2px;
+  --chart-hover-duration: 200ms;
+  --chart-flow-duration: 1.4s;
+  --chart-mount-duration: 600ms;
+
+  /* ── Roadmap-18 — Charts II: Fluid & Glossy ──────────────────────
+   * `chart-soft-shadow` is the drop shadow chart SURFACES cast to
+   * lift off the card behind them — the donut ring, a bar cluster,
+   * an area fill read as a physical object floating a hair above
+   * the card. Deliberately SOFT + LOW: a large blur (12px) at low
+   * alpha. A hard shadow would read as "a UI chrome element"; the
+   * soft one reads as "a glossy object catching ambient light."
+   * DARK theme: the shadow is near-black at 38% — dark surfaces
+   * need a darker shadow to register at all.
+   *
+   * `chart-bubble-duration` paces the CSS `chart-bubble-in`
+   * keyframe (the pure-CSS sibling of the JS `useChartSpring`
+   * hook — for chart surfaces that animate via a className rather
+   * than a per-shape progress value). 520ms matches
+   * CHART_SPRING_DURATION_MS so the CSS path and the JS path read
+   * as the same motion. */
+  --chart-soft-shadow: 0 6px 12px rgba(0, 0, 0, 0.38);
+  --chart-bubble-duration: 520ms;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIGHT THEME — playerz.bg-inspired enterprise palette.
+
+   Activated by ThemeProvider setting `data-theme="light"` on <html>.
+   Designed around:
+     - warm off-white / cream backgrounds (not cold blue-slate)
+     - charcoal text hierarchy (not blue-tinted)
+     - playerz.bg signature orange as the primary accent
+     - warm neutral borders
+     - conservative, document-friendly status colors
+
+   Palette origin: playerz.bg brand language + Tailwind warm neutrals.
+   Contrast: all text/surface pairs meet WCAG 2.1 AA (4.5:1+).
+   ═══════════════════════════════════════════════════════════════════ */
+[data-theme='light'] {
+  /* ── Surfaces ──────────────────────────────────────────────────── */
+  --bg-page: #f4f2ed; /* warm off-white — app background */
+  --bg-default: #f8f6f3; /* warm off-white — cards, panels, modals */
+  --bg-muted: #f0ede7; /* warm light gray — hover, pressed */
+  --bg-subtle: rgba(139, 130, 118, 0.07); /* warm taupe @ 7% — selection, faint tints */
+  --bg-elevated: #fdfcfa; /* lightest off-white — tooltips, dropdowns above default */
+  --bg-inverted: #1a1a1a; /* near-black — primary button bg */
+  --bg-overlay: rgba(26, 26, 26, 0.45); /* charcoal overlay — modals, drawers */
+
+  /* ── Content / Text ────────────────────────────────────────────── */
+  /*
+   * GAP-CI-77: bumped `--content-muted` and `--content-subtle` so
+   * small text on `--bg-default` (#F8F6F3 cream) clears WCAG AA
+   * 4.5:1. The previous values (#6B6B6B, #8E8E8E) gave 4.90:1 and
+   * 3.05:1 — the latter failed `text-xs` (12px) body text. The new
+   * values preserve the muted > subtle tier ordering.
+   */
+  --content-emphasis: #1a1a1a; /* deep charcoal — headings, selected, bold labels */
+  --content-default: #3d3d3d; /* dark charcoal — body text, table cells (11.4:1) */
+  --content-muted: #525252; /* darker warm gray — secondary text, captions (7.2:1 on bg-default) */
+  --content-subtle: #6b6b6b; /* warm medium gray — hints, disabled, tertiary (4.9:1 on bg-default) */
+  --content-inverted: #faf9f7; /* warm off-white — text on inverted/dark surfaces */
+
+  /* ── Borders / Dividers ────────────────────────────────────────── */
+  --border-default: #e5e2de; /* warm gray — standard borders */
+  --border-subtle: rgba(229, 226, 222, 0.6); /* warm gray @ 60% — soft dividers */
+  --border-emphasis: #c9c5be; /* medium warm gray — focused inputs */
+
+  /* ── Process canvas (Roadmap-27) — light mirror ──────────────────
+   *   depth ramp (light → dark): node < frame < page < surface;
+   *   the recessed plane is the only surface DARKER than the page. */
+  --canvas-surface: #ece9e1; /* recessed work plane — soft warm gray */
+  --canvas-frame: #fbfaf8; /* workspace frame + chrome strips */
+  --canvas-grid: rgba(74, 64, 52, 0.12); /* dot grid — faint warm */
+  --canvas-edge: #ada395; /* default connection stroke (R27-PR-B) */
+  --canvas-node: #ffffff; /* node fill — elevated flow card */
+  --canvas-node-muted: #f4f1ea; /* node fill — context (quieter) */
+  --canvas-border: rgba(74, 64, 52, 0.14); /* hairline inside the workspace */
+  --canvas-shadow: 0 6px 16px -10px rgba(60, 50, 40, 0.28), 0 1px 2px rgba(60, 50, 40, 0.12);
+  --canvas-recess: inset 0 11px 20px -16px rgba(60, 50, 40, 0.22);
+
+  /* ── Brand / Primary (playerz.bg-inspired orange) ──────────────────────── */
+  --brand-default: #16a34a; /* playerz green (brand-500) — links, accents */
+  --brand-emphasis: #15803d; /* brand-600 — primary buttons, active (5.1:1 on white) */
+  --brand-muted: #22c55e; /* lighter green — hover accent */
+  --brand-subtle: rgba(22, 163, 74, 0.09); /* green @ 9% — brand tint backgrounds */
+
+  /* ── Brand / Secondary (deep navy — complementary cool counterpoint) ──
+   *
+   * Roadmap-13's two-tone state vocabulary lands on the light theme
+   * as deep navy (#1E3A8A — Tailwind indigo-900-ish). Against the
+   * warm cream `--bg-default` (#F8F6F3) navy reads as the natural
+   * cool counter to playerz.bg orange — same complementary-contrast logic
+   * as playerz's electric-blue secondary, adapted to the palette
+   * temperature.
+   *
+   * Contrast: 12.3:1 on `--bg-default`, well above WCAG AAA. Any
+   * primitive that paints text or a band in this token will be
+   * unmissable without looking aggressive.
+   */
+  --brand-secondary-default: #0f766e; /* deep teal — secondary brand, complementary to playerz green */
+  --brand-secondary-emphasis: #115e59; /* deeper teal — primary band stop, active surfaces */
+  --brand-secondary-muted: #14b8a6; /* lighter teal — band highlight midstop, hover accent */
+  --brand-secondary-subtle: rgba(15, 118, 110, 0.09); /* teal @ 9% — secondary tint backgrounds */
+
+  /* ── Status: Success ───────────────────────────────────────────── */
+  /*
+   * GAP-CI-77: status content colours darkened so the badge text
+   * (rendered on the alpha-blended `--bg-*` tint over `--bg-default`
+   * cream) clears WCAG AA 4.5:1. The previous values were measured
+   * against the bare cream surface, but every status badge in the
+   * codebase paints over the tinted surface — which is darker than
+   * cream and breaks the contrast assumption.
+   */
+  --bg-success: rgba(22, 128, 57, 0.07); /* forest green @ 7% — badge tint */
+  --bg-success-emphasis: #047857; /* green-700 — solid actionable surface, AA on white */
+  --content-success: #0e6332; /* green-800 — darker for badge tint AA (5.4:1) */
+  --border-success: rgba(22, 128, 57, 0.2);
+
+  /* ── Status: Warning ───────────────────────────────────────────── */
+  --bg-warning: rgba(180, 83, 9, 0.07); /* warm amber @ 7% — badge tint */
+  --bg-warning-emphasis: #b45309; /* amber-700 — solid actionable surface */
+  --content-warning: #92420a; /* amber-800 — darker for badge tint AA (5.6:1) */
+  --border-warning: rgba(180, 83, 9, 0.2);
+
+  /* ── Status: Error / Danger ────────────────────────────────────── */
+  --bg-error: rgba(185, 28, 28, 0.07); /* deep red @ 7% — badge tint */
+  --bg-error-emphasis: #b91c1c; /* red-700 — solid actionable surface, AA on white */
+  --content-error: #991616; /* red-800 — darker for badge tint AA (6.2:1) */
+  --border-error: rgba(185, 28, 28, 0.2);
+
+  /* ── Status: Info ──────────────────────────────────────────────── */
+  --bg-info: rgba(29, 78, 216, 0.07); /* steel blue @ 7% — badge tint */
+  --bg-info-emphasis: #1d4ed8; /* blue-700 — solid actionable surface */
+  --content-info: #1a41b8; /* blue-800 — darker for badge tint AA (6.0:1) */
+  --border-info: rgba(29, 78, 216, 0.2);
+
+  /* ── Status: Attention ─────────────────────────────────────────── */
+  --bg-attention: rgba(180, 83, 9, 0.07);
+  --content-attention: #92420a; /* matches warning — same tint AA fix */
+  --border-attention: rgba(180, 83, 9, 0.2);
+
+  /* ── Interactive / Focus ───────────────────────────────────────── */
+  --ring-default: rgba(22, 163, 74, 0.4); /* brand-orange focus ring */
+  --focus-ring: rgba(22, 163, 74, 0.4);
+  --ring: rgba(22, 163, 74, 0.4);
+  --ring-offset-background: #f8f6f3;
+  --primary: #16a34a;
+
+  /* ── Glass (warm light variant) ─────────────────────────────────── */
+  --glass-bg: rgba(
+    248,
+    246,
+    243,
+    0.85
+  ); /* tinted to --bg-default so .glass-card matches solid card surfaces */
+  --glass-border: rgba(229, 226, 222, 0.5);
+  --glass-blur: 12px;
+
+  /* ── Shadows — warm-tinted, subtle ──────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgba(60, 50, 40, 0.06);
+  --shadow: 0 4px 12px rgba(60, 50, 40, 0.08);
+  --shadow-lg: 0 8px 24px rgba(60, 50, 40, 0.12);
+
+  /* ── Liquid-carbon button surface — LIGHT theme ────────────────────
+   * See the dark-theme block for the rationale. The light theme
+   * needs a DEEPER bottom pool — on a light-ish variant surface a
+   * 20%-black floor barely registers, so it goes to 26%. The
+   * meniscus catch-light is warm-white and slightly crisper (13%)
+   * so the "wet" read survives on a brighter face. The bevel
+   * top-highlight lifts to 50% white — a liquid surface in light
+   * mode catches a sharper top-edge gleam. The border is warm-
+   * tinted to match the playerz.bg palette rather than pure black. */
+  --btn-carbon-overlay: radial-gradient(
+    ellipse 130% 80% at 50% -10%,
+    rgba(255, 252, 248, 0.13) 0%,
+    rgba(255, 252, 248, 0.03) 32%,
+    rgba(40, 30, 20, 0.14) 62%,
+    rgba(40, 30, 20, 0.26) 100%
+  );
+  --btn-carbon-bevel:
+    inset 0 1px 1px rgba(255, 255, 255, 0.5), inset 0 -2px 3px rgba(255, 255, 255, 0.1),
+    0 1px 2px rgba(60, 50, 40, 0.2);
+  /* R22-PR-B — softened α 0.24 → 0.16, warm-graphite preserved. */
+  --btn-carbon-border: rgba(60, 50, 40, 0.16);
+
+  /* ── R20 ambient elevation (4-stop, LIGHT theme) ────────────────────
+   * Warm-tinted parallel of the dark-theme block. Light-mode shadow
+   * needs to LEAN cooler-warm (a true black drop reads dirty on a
+   * cream surface) — alphas come down, the colour shifts to a soft
+   * warm graphite (60/50/40). Focus ring switches to brand orange. */
+  --btn-ambient-rest: 0 1px 2px rgba(60, 50, 40, 0.1), 0 2px 6px rgba(60, 50, 40, 0.06);
+  --btn-ambient-hover: 0 2px 4px rgba(60, 50, 40, 0.14), 0 6px 16px rgba(60, 50, 40, 0.1);
+  --btn-ambient-press: 0 1px 1px rgba(60, 50, 40, 0.14);
+  /* R22-PR-B — focus ring tightened 4px → 3px (light-theme parallel). */
+  --btn-ambient-focus:
+    0 0 0 3px rgba(22, 163, 74, 0.18), 0 1px 2px rgba(60, 50, 40, 0.1),
+    0 2px 6px rgba(60, 50, 40, 0.06);
+
+  /* ── R20 iridescent edge (LIGHT theme) ──────────────────────────────
+   * Brand orange ↔ secondary navy. Slightly higher alphas than dark
+   * — on light surfaces, a 55%-alpha gradient stop reads softer
+   * than the same on dark, so the iridescent edge holds its
+   * presence without becoming a hard outline. */
+  --btn-iridescent-gradient: linear-gradient(
+    135deg,
+    rgba(22, 163, 74, 0.6) 0%,
+    rgba(22, 163, 74, 0.18) 35%,
+    rgba(15, 61, 34, 0.18) 65%,
+    rgba(15, 61, 34, 0.6) 100%
+  );
+
+  /* ── Primary action-button FILL gradient (LIGHT theme) ──────────────
+   * Brand orange dominant through the first 60%, ramping to a SUBTLE
+   * navy (#1e3a8a) corner in the final stretch (135°). See the
+   * dark-theme token above for the rationale (solid body fill, crisp
+   * white label, distinct from the 1px iridescent EDGE). */
+  /* UI-11: see dark-theme note. Light-theme cool tail lightened from the very
+     dark navy #1e3a8a to a soft periwinkle, transition starting at 50%. */
+  --btn-gradient-primary: linear-gradient(
+    135deg,
+    var(--brand-default) 0%,
+    var(--brand-default) 50%,
+    #3fa96b 100%
+  );
+
+  /* ── R20 aura wash (LIGHT theme) ───────────────────────────────────
+   * Brand orange for primary; warm-neutral for secondary. Outer
+   * bloom is tighter than dark (lift on a light surface needs less
+   * spread to read), inner glow holds the same haptic edge. */
+  --btn-aura-primary:
+    0 0 0 1px rgba(22, 163, 74, 0), 0 4px 14px rgba(22, 163, 74, 0.28),
+    0 10px 28px rgba(22, 163, 74, 0.12);
+  --btn-aura-neutral:
+    0 0 0 1px rgba(60, 50, 40, 0), 0 4px 14px rgba(60, 50, 40, 0.1),
+    0 10px 28px rgba(60, 50, 40, 0.06);
+
+  /* ── R20 form-control parity edge (LIGHT theme) ─────────────────────
+   * Warmer borders. Rest: 22% warm-grey (a softer outline than the
+   * cool one used in dark, suits cream surfaces). Hover: 38%. Focus
+   * ring: brand orange. The hover/focus alphas are slightly higher
+   * than dark because cream surfaces swallow contrast. */
+  --ctrl-edge-rest: rgba(60, 50, 40, 0.22);
+  --ctrl-edge-hover: rgba(60, 50, 40, 0.38);
+  /* R20-PR-D — enriched focus halo (light theme). Warm-tinted
+   * ambient drop matches the rest of the light-theme shadow scale
+   * (alphas dropped to the warm-graphite range so the lift reads
+   * subtle on cream surfaces). See the dark-theme block above for
+   * the rationale. */
+  --ctrl-edge-focus:
+    0 0 0 3px rgba(22, 163, 74, 0.2), 0 1px 2px rgba(60, 50, 40, 0.1),
+    0 2px 6px rgba(60, 50, 40, 0.06);
+
+  /* ── R24 liquid-glass button material (LIGHT theme) ─────────────────
+   *
+   * Light-theme glass tokens — mirror of the dark-theme R24 block above
+   * with inverted alphas and warm-graphite tints. The tint base is a
+   * cool-white wash (not pure white) so the glass has a subtle blue
+   * undertone against the cream `--bg-default` (#F8F6F3); pure white
+   * would dissolve into the page. Edge sheen uses warm-graphite for
+   * the shadowed stop instead of dark-theme's near-black. Inner
+   * highlight + outer shadow drop their alphas (light surfaces need
+   * less depth contrast). Blur radius matches the dark theme — it's
+   * a perceptual constant, not a brightness-dependent value. */
+  /* R24-PR-B alpha calibration — light theme tint stays high (cream
+   * surfaces need more material density than dark to read as glass)
+   * but inner highlight + outer shadow bumped in proportion so the
+   * light + dark experiences are equally visible. Blur matches at
+   * 12px. */
+  --btn-glass-tint: linear-gradient(
+    180deg,
+    rgba(255, 252, 248, 0.55) 0%,
+    rgba(255, 252, 248, 0.28) 100%
+  );
+  --btn-glass-blur: 12px;
+  --btn-glass-edge: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.75) 0%,
+    rgba(255, 255, 255, 0.26) 45%,
+    rgba(60, 50, 40, 0.18) 100%
+  );
+  --btn-glass-inner: inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -1px 0 rgba(60, 50, 40, 0.14);
+  --btn-glass-shadow: 0 1px 3px rgba(60, 50, 40, 0.14), 0 6px 14px rgba(60, 50, 40, 0.1);
+
+  /* R24-hotfix — per-variant translucent fills (LIGHT theme).
+   * Higher base alpha (0.65) than dark theme — light surfaces need
+   * more colour density than dark to read as the same brand
+   * identity. Brand orange + warm graphite + red, all translucent
+   * enough for the backdrop-blur to work. */
+  --btn-glass-fill-primary: rgba(21, 128, 61, 0.92); /* brand-600 — white label needs AA on light */
+  --btn-glass-fill-secondary: rgba(40, 50, 42, 0.18); /* neutral, green-leaning */
+  --btn-glass-fill-destructive: rgba(
+    185,
+    28,
+    28,
+    0.92
+  ); /* red-700 @ 92% — white label needs AA on a LIGHT surface. red-600 composites to #e46d6c here (3.13:1, axe-serious); even solid #DC2626 only reaches 4.48:1. red-700 gives 5.9:1. */
+
+  /* ── Sidebar band glow (R13-PR2) ───────────────────────────────── */
+  /*
+   * playerz.bg: orange @ 35% on the cream `--bg-default` (#F8F6F3). Same
+   * 6px blur radius as playerz — the geometry of the glow is theme-
+   * independent; only the colour swaps. A flatter alpha would
+   * disappear on cream; 0.35 lets the glow read at peripheral
+   * vision without compromising legibility of the band itself.
+   */
+  --nav-band-glow: 0 0 6px rgba(22, 163, 74, 0.35);
+
+  /* ── Sidebar band glow — ACTIVE variant (R13-PR4) ──────────────── */
+  /*
+   * playerz.bg active rows paint the band with deep navy. The active glow
+   * is the navy hue at the same 35% alpha — keeps the aura coherent
+   * with the band's stops. Geometry matches the playerz glow (6px
+   * blur) so the visual weight of the active state feels balanced
+   * across themes.
+   */
+  --nav-band-glow-active: 0 0 6px rgba(15, 61, 34, 0.35);
+
+  /* ── Sidebar gloss highlight (R13-PR6) ─────────────────────────── */
+  /*
+   * On the cream playerz.bg surface a white-on-cream highlight is much
+   * less effective at simulating "light catching the edge" — cream
+   * already reads as nearly-white. The playerz.bg gloss inverts the
+   * direction: instead of "lighter at top", we use a faint white
+   * at 70% which lands as a near-white sliver on cream — still
+   * subtle, but readable as a defined top edge. The geometry of
+   * the gloss (1px line, top edge) is identical across themes; only
+   * the alpha tunes for surface luminance.
+   */
+  --nav-gloss-highlight: rgba(255, 255, 255, 0.7);
+
+  /* ── Sidebar bevel shadow (R13-PR7) ────────────────────────────── */
+  /*
+   * On cream the bevel shadow is a warm-tinted alpha rather than
+   * pure black — matches the warm-neutral shadow vocabulary of the
+   * light theme (see `--shadow`, also rgba(60, 50, 40, …)). Alpha
+   * is lower than playerz (0.08 vs 0.25) because cream is more
+   * sensitive to dark inserts; a heavier value would make the row
+   * look smudged.
+   */
+  --nav-bevel-shadow: inset 0 -1px 1px 0 rgba(60, 50, 40, 0.08);
+
+  /* R15-PR7 — light-theme liquid sweep tint. playerz.bg orange at 16%
+   * opacity. Slightly higher alpha than playerz (0.14) because the
+   * cream surface (`--bg-default: #FAF7F2`) has lower contrast
+   * with brand orange than the navy playerz surface has with brand
+   * yellow — equalising the perceived wash strength across
+   * themes.
+   */
+  --nav-row-liquid-tint: rgba(22, 163, 74, 0.16);
+
+  /* R15-PR9 — light-theme active-row aura. Deep navy
+   * (rgba(15, 61, 34, …) = `--brand-secondary-default` on the
+   * light theme) at 18% alpha. Same alpha as playerz for theme
+   * parity — both themes produce the same perceived halo
+   * strength because the underlying brand-secondary RGB
+   * compensates for cream-surface absorption.
+   */
+  --nav-row-aura-color: rgba(15, 61, 34, 0.18);
+
+  /* ───────────────────────────────────────────────────────────────
+   * R16-PR1 — Lickable Chart palette + motion (playerz.bg theme).
+   *
+   * Six-series palette, same hue families as playerz above, but
+   * restrained earth tones against the cream surface (#F4F2ED).
+   * playerz uses jewel tones; playerz.bg uses what feels right next to
+   * cream — deeper saturation on dark hues, lighter on the
+   * brand orange to keep series-1 from dominating.
+   *
+   * Adjacent-tonal pairing preserved: series-1 (orange) → series-2
+   * (navy) bridges through dusk-mauve; series-3 (teal) → series-4
+   * (rose) bridges through warm-grey. The boundary between any
+   * two adjacent series sits in a perceptually-neutral mid-tone
+   * so the gradient meeting (R16-PR2 onwards) reads as fluid,
+   * not jarring.
+   * ─────────────────────────────────────────────────────────── */
+
+  /* Series 1 — primary brand (playerz.bg orange, slightly muted for
+   * cream contrast). */
+  --chart-series-1-start: #16a34a;
+  --chart-series-1-end: #a03a00;
+
+  /* Series 2 — navy. Direct counterpart to playerz series-2 cyan;
+   * navy keeps the cool weight on cream. */
+  --chart-series-2-start: #1e3a8a;
+  --chart-series-2-end: #172554;
+
+  /* Series 3 — teal. Replaces playerz violet — teal anchors the
+   * cool family on cream where violet would feel kitschy. */
+  --chart-series-3-start: #0f766e;
+  --chart-series-3-end: #134e4a;
+
+  /* Series 4 — rose. Bridges teal → forest through warm-pink. */
+  --chart-series-4-start: #be185d;
+  --chart-series-4-end: #831843;
+
+  /* Series 5 — forest. The "growth" tone in playerz.bg trend cards. */
+  --chart-series-5-start: #15803d;
+  --chart-series-5-end: #14532d;
+
+  /* Series 6 — amber-warm. Closes the loop toward series-1
+   * orange so a 6-segment donut reads as continuous wheel. */
+  --chart-series-6-start: #b45309;
+  --chart-series-6-end: #78350f;
+
+  /* Empty / disabled / projected. */
+  --chart-series-muted: rgba(120, 113, 108, 0.28);
+
+  /* Motion — same shape + values as playerz. Chart motion is
+   * theme-independent; tempo + distance both stay constant so
+   * the chart-language reads identically across themes. */
+  --chart-hover-pop-distance: 4px;
+  --chart-hover-lift: 2px;
+  --chart-hover-duration: 200ms;
+  --chart-flow-duration: 1.4s;
+  --chart-mount-duration: 600ms;
+
+  /* Roadmap-18 — see the dark-theme block for the rationale.
+   * LIGHT theme: the shadow is softer + lighter (15% vs 38%) —
+   * on a near-white card a 38%-black shadow would read as a
+   * hard smudge; 15% gives the same "floating glossy object"
+   * lift without the heaviness. */
+  --chart-soft-shadow: 0 6px 12px rgba(15, 23, 42, 0.15);
+  --chart-bubble-duration: 520ms;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * Reduced-motion preference (WCAG 2.1 SC 2.3.3 — Animation from
+ * Interactions). Users who've set `prefers-reduced-motion: reduce`
+ * at the OS level should see only essential motion. We flatten our
+ * transition / animation durations to a near-zero value so every
+ * component built on top of `--duration-*` variables respects the
+ * preference without per-component opt-in. Tailwind-generated
+ * `transition-*` / `animate-*` utilities also short-circuit here.
+ * ───────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 1ms;
+    --duration-default: 1ms;
+    --duration-slow: 1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
