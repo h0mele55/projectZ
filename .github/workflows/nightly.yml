@@ -2,25 +2,26 @@ name: Nightly
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
-  NODE_VERSION: "24"
-  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/playerz_test"
-  REDIS_URL: "redis://localhost:6379"
-  SKIP_ENV_VALIDATION: "1"
-  NEXTAUTH_SECRET: "ci-test-secret-not-a-real-key"
-  NEXTAUTH_URL: "http://localhost:3000"
+  NODE_VERSION: '24'
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/playerz_test'
+  REDIS_URL: 'redis://localhost:6379'
+  SKIP_ENV_VALIDATION: '1'
+  # Throwaway value so NextAuth can boot in CI. Authenticates nothing.
+  NEXTAUTH_SECRET: 'ci-test-secret-not-a-real-key' # pragma: allowlist secret
+  NEXTAUTH_URL: 'http://localhost:3000'
 
 jobs:
   # Full cross-browser E2E — chromium runs per-PR, firefox only here,
   # so a slow browser never gates a merge.
   e2e-full:
-    name: "E2E (${{ matrix.browser }})"
+    name: 'E2E (${{ matrix.browser }})'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     strategy:
@@ -34,16 +35,16 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: playerz_test
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready --health-interval 10s
           --health-timeout 5s --health-retries 5
       redis:
         image: redis:7
-        ports: ["6379:6379"]
+        ports: ['6379:6379']
       mailhog:
         image: mailhog/mailhog:latest
-        ports: ["1025:1025", "8025:8025"]
+        ports: ['1025:1025', '8025:8025']
     steps:
       - uses: actions/checkout@v4
       - name: Bail if not scaffolded

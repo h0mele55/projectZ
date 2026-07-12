@@ -1,0 +1,11 @@
+// Generator + datasource ONLY — the sole-owner pattern. Every model lives
+// in a sibling file so a domain can be read without scrolling past the
+// plumbing. Connection URLs live in prisma.config.ts (Prisma 7 rejects an
+// inline `url` here).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}

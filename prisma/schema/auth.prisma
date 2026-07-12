@@ -1,0 +1,62 @@
+// ── Hybrid tenancy ──────────────────────────────────────────────────
+//
+// A player is GLOBAL: one User, one identity, one rating — they play at
+// many venues. A venue's staff relationship is PER-TENANT. So User has no
+// tenantId; TenantMembership carries it.
+//
+// Every tenant-scoped table therefore has a `tenantId` and an RLS policy
+// keyed on `current_setting('app.tenant_id')`. See the migration.
+//
+// P03 lands the minimum the test harness must prove itself against.
+// P04 expands this (PlayerProfile, UserSession, PasswordResetToken,
+// Invite, TenantSecuritySettings, TenantCustomRole, ApiKey).
+
+model VenueOrg {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // E2E cleanup marker — an isolated-tenant fixture stamps its run id here
+  // so teardown is unambiguous even if a spec crashes mid-way.
+  tenantTestRun String?
+
+  memberships TenantMembership[]
+
+  @@index([tenantTestRun])
+  @@map("venue_org")
+}
+
+// Global identity. No tenantId — deliberately.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships TenantMembership[]
+
+  @@map("app_user")
+}
+
+model TenantMembership {
+  id       String           @id @default(cuid())
+  tenantId String
+  userId   String
+  role     Role             @default(PLAYER)
+  status   MembershipStatus @default(INVITED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant VenueOrg @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId, status])
+  @@index([userId])
+  @@map("tenant_membership")
+}

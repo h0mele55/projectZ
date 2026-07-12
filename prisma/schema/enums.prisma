@@ -1,0 +1,17 @@
+// P03 defines only what the test spine needs to prove itself.
+// P04 adds the rest (SportType, CourtSurface, BookingStatus, PaymentStatus,
+// SessionType, SkillLevel, Locale).
+
+enum Role {
+  OWNER
+  MANAGER
+  COACH
+  STAFF
+  PLAYER
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
