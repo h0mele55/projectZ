@@ -1,18 +1,18 @@
 model OpenPlaySession {
-  id       String @id @default(cuid())
-  tenantId String
+  id         String  @id @default(cuid())
+  tenantId   String
   resourceId String?
 
-  hostUserId String
-  sport      SportType
+  hostUserId  String
+  sport       SportType
   /// Denormalised from the registry so a family filter is one index hit, not
   /// a 16-way IN clause rebuilt on every query.
-  sportFamily String @default("RACKET")
+  sportFamily String    @default("RACKET")
 
   /// RESOURCE  — a court/table/lobby is reserved (the MVP model).
   /// MEETING_POINT — running and cycling: people agree to meet at a lat/lng.
   ///   There is nothing to reserve, so resourceId is null.
-  locationMode    String  @default("RESOURCE")
+  locationMode    String   @default("RESOURCE")
   meetingPointLat Decimal? @db.Decimal(10, 7)
   meetingPointLng Decimal? @db.Decimal(10, 7)
   routeRef        String?

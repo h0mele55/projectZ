@@ -6,8 +6,8 @@
 /// loses: two requests both read "free", both write, both succeed. The
 /// constraint is the only thing that holds.
 model Booking {
-  id       String @id @default(cuid())
-  tenantId String
+  id         String @id @default(cuid())
+  tenantId   String
   resourceId String
 
   startTs DateTime @db.Timestamptz(3)

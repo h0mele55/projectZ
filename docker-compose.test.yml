@@ -46,6 +46,39 @@ services:
       timeout: 5s
       retries: 10
 
+  centrifugo:
+    image: centrifugo/centrifugo:v6
+    container_name: playerz-test-centrifugo
+    command: centrifugo
+    # Configured by ENV, not a config file. Centrifugo does NOT expand
+    # ${VAR} inside its JSON config — the placeholders stay literal, and the
+    # engine then fails on a "malformed connection address" that tells you
+    # nothing about why.
+    environment:
+      CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: test-token-secret
+      CENTRIFUGO_HTTP_API_KEY: test-api-key
+      CENTRIFUGO_CLIENT_ALLOWED_ORIGINS: 'http://localhost:3000'
+      CENTRIFUGO_ENGINE_TYPE: redis
+      CENTRIFUGO_ENGINE_REDIS_ADDRESS: redis-test:6379
+      # WebSocket is on by default in v6. SSE and the health endpoint are not.
+      CENTRIFUGO_SSE_ENABLED: 'true'
+      CENTRIFUGO_HEALTH_ENABLED: 'true'
+      # Presence + history on the chat namespace: history is what lets a
+      # reconnecting client recover the messages it missed while offline.
+      CENTRIFUGO_CHANNEL_NAMESPACES: >-
+        [{"name":"conv","presence":true,"join_leave":true,"history_size":100,"history_ttl":"24h","force_recovery":true},
+         {"name":"notif","history_size":50,"history_ttl":"24h","force_recovery":true},
+         {"name":"presence","presence":true,"join_leave":true}]
+    ports:
+      - '8001:8000'
+    depends_on:
+      - redis-test
+    healthcheck:
+      test: ['CMD', 'sh', '-c', 'wget -qO- http://127.0.0.1:8000/health || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   playerz-test-pgdata:
   playerz-test-redisdata:

@@ -1,0 +1,103 @@
+enum ConversationType {
+  DM
+  GROUP
+  SESSION
+  VENUE_CHANNEL
+  COACH_THREAD
+}
+
+/// One conversation model for everything.
+///
+/// The alternative — a separate table per surface (DMs, session chat, venue
+/// announcements, coach threads) — means four inboxes, four unread counts,
+/// four blocking implementations, and four places to fix the next XSS. Users
+/// experience one messaging system, so it is one model.
+model Conversation {
+  id   String           @id @default(cuid())
+  type ConversationType
+
+  /// NULLABLE — a DM between two players who met at different clubs belongs to
+  /// no tenant. That makes the RLS policy ASYMMETRIC, exactly like UserSession
+  /// in P04: readable when null, never WRITABLE into a tenant that isn't yours.
+  tenantId String?
+
+  title       String?
+  createdById String
+
+  lastMessageAt DateTime  @default(now())
+  archivedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     ChatMessage[]
+
+  @@index([tenantId])
+  @@index([lastMessageAt])
+  @@index([createdById])
+  @@map("conversation")
+}
+
+model ConversationParticipant {
+  conversationId String
+  userId         String
+
+  role              String    @default("MEMBER")
+  joinedAt          DateTime  @default(now())
+  /// Null = never read anything. Only ever moves FORWARD (see markRead).
+  lastReadMessageId String?
+  mutedUntil        DateTime?
+  /// Set on leave. The row is KEPT, not deleted — a departed member must not
+  /// silently vanish from the history of a conversation they were part of.
+  leftAt            DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participant")
+}
+
+model ChatMessage {
+  id             String @id @default(cuid())
+  conversationId String
+  senderId       String
+
+  /// Encrypted at rest + HTML-sanitised on write. Chat is the highest-risk
+  /// surface in the product: text one user writes and another user's BROWSER
+  /// renders.
+  body String
+
+  attachmentsJson Json?
+  replyToId       String?
+
+  editedAt  DateTime?
+  /// SOFT delete. A hard delete leaves a hole in every other participant's
+  /// scrollback and breaks replyTo. A tombstone renders as "message deleted".
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@map("chat_message")
+}
+
+/// GLOBAL — no tenantId. Blocking follows the PERSON, not the club.
+///
+/// If a block were tenant-scoped, someone you blocked at one venue could
+/// message you from another. That is not a blocking feature; it is a
+/// loophole with extra steps.
+model UserBlock {
+  blockerId String
+  blockedId String
+
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("user_block")
+}
