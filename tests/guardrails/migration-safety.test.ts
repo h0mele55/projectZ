@@ -70,6 +70,18 @@ const PROTECTED: Protected[] = [
     why: 'geo search degrades to a sequential scan over every venue',
   },
   {
+    name: 'moderation_case_one_open_idx (PARTIAL unique index)',
+    drop: /DROP INDEX\s+(?:IF EXISTS\s+)?"?moderation_case_one_open_idx/i,
+    recreate: /CREATE UNIQUE INDEX\s+(?:IF NOT EXISTS\s+)?"?moderation_case_one_open_idx/i,
+    why: 'a brigade can bury the moderation queue in duplicate reports of one item',
+  },
+  {
+    name: 'review_rating_range (CHECK)',
+    drop: /DROP\s+CONSTRAINT\s+"?review_rating_range/i,
+    recreate: /ADD CONSTRAINT\s+review_rating_range/i,
+    why: 'a 0- or 6-star rating silently skews every average that includes it',
+  },
+  {
     name: 'ledger append-only trigger',
     drop: /DROP TRIGGER\s+(?:IF EXISTS\s+)?"?ledger_append_only/i,
     recreate: /CREATE TRIGGER\s+"?ledger_append_only/i,

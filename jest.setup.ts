@@ -20,6 +20,11 @@ Object.assign(process.env, {
   // why the defaults belong here and not in a file the runner may not have.
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ?? 'sk_test_dummy', // pragma: allowlist secret
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET ?? 'whsec_test_dummy', // pragma: allowlist secret
+
+  // Moderation. Absent this, `classifyText` throws ModerationUnavailableError
+  // and EVERY review would be queued — the tests would pass for entirely the
+  // wrong reason, proving only that our outage path works.
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? 'sk-test-moderation-dummy', // pragma: allowlist secret
 });
 
 export {};
