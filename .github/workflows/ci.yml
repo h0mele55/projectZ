@@ -47,7 +47,7 @@ jobs:
       has_e2e: ${{ steps.detect.outputs.has_e2e }}
       has_docker: ${{ steps.detect.outputs.has_docker }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: detect
         run: |
           if [ -f package.json ] && [ -f package-lock.json ]; then
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -97,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -115,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -128,7 +128,7 @@ jobs:
         run: npm run test:guardrails
       - name: Upload JUnit report
         if: ${{ !cancelled() && needs.preflight.outputs.has_app == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: junit-unit
           path: junit.xml
@@ -181,7 +181,7 @@ jobs:
           --health-cmd "wget -qO- http://127.0.0.1:7700/health || exit 1"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -283,7 +283,7 @@ jobs:
           --health-cmd "wget -qO- http://127.0.0.1:7700/health || exit 1"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-prisma
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -319,7 +319,7 @@ jobs:
 
       - name: Upload coverage
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage/
@@ -334,7 +334,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -344,7 +344,7 @@ jobs:
         run: npm run build
       - name: Upload build output
         if: needs.preflight.outputs.has_app == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: next-build
           path: .next
@@ -380,7 +380,7 @@ jobs:
         image: mailhog/mailhog:latest
         ports: ['1025:1025', '8025:8025']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_e2e == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -398,7 +398,7 @@ jobs:
         run: npm run test:e2e
       - name: Upload Playwright report
         if: ${{ failure() && needs.preflight.outputs.has_e2e == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
@@ -417,7 +417,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -426,7 +426,7 @@ jobs:
 
       - name: Dependency review
         if: ${{ github.event_name == 'pull_request' && needs.preflight.outputs.has_app == 'true' }}
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           comment-summary-in-pr: always
@@ -467,7 +467,7 @@ jobs:
       matrix:
         language: [javascript-typescript, actions]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # CodeQL hard-fails (exit 32, "no source code seen") when a
       # language's extractor finds nothing to analyse. Before P01 there
@@ -485,16 +485,16 @@ jobs:
 
       - name: Initialize CodeQL
         if: steps.gate.outputs.go == 'true'
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
       - name: Autobuild
         if: steps.gate.outputs.go == 'true'
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
       - name: Perform CodeQL Analysis
         if: steps.gate.outputs.go == 'true'
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: '/language:${{ matrix.language }}'
 
@@ -513,7 +513,7 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Trivy filesystem scan (SARIF)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -527,7 +527,7 @@ jobs:
 
       - name: Upload Trivy SARIF to GitHub Security
         if: ${{ !cancelled() }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
