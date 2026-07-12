@@ -63,3 +63,38 @@ somebody (me) had altered it, and refused to go quietly.
 Without it, `/venues` renders its empty state and every discovery spec passes
 by asserting nothing. A suite that is green because it is staring at an empty
 page is worse than no suite: it is a green light that means nothing.
+
+## The image scan immediately earned its keep
+
+The very first run of the new Trivy **image** scan failed the build on
+`undici` **CVE-2026-12151** (HIGH — DoS via unbounded memory growth).
+
+The interesting part is *where* it was:
+
+```
+usr/local/lib/node_modules/npm/node_modules/undici  → 6.26.0
+```
+
+**Not in our dependency tree at all.** It is bundled inside **npm itself**,
+shipped in the `node:24-alpine` base image. No `overrides` entry in our
+`package.json` can reach it, `npm audit` cannot see it, and the Trivy
+*filesystem* scan structurally cannot see it either — it only reads the
+project's own manifests.
+
+That is precisely the gap the image scan exists to close, and it found a real
+one on its first run.
+
+The fix is not to patch npm. It is to **remove npm from the runtime image
+entirely**:
+
+- a production container has no business shipping a package manager — npm can
+  reach the network and write to disk, which makes it a ready-made
+  download-and-execute primitive for any RCE that lands in the app;
+- and removing it takes the bundled CVE with it.
+
+Next is invoked directly (`./node_modules/.bin/next start`) instead of through
+`npm run start`. Verified: npm is gone, the container still boots as uid 1001,
+and `/api/health` still answers. Image scan is now clean.
+
+(We *also* added an `undici: ^7.28.0` override, which fixes our own tree.
+Both were needed; neither alone was sufficient.)

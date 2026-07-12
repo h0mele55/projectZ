@@ -35,6 +35,25 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 
+# ── Remove npm from the RUNTIME image ───────────────────────────────
+#
+# Two reasons, and the second is the one that actually bit us:
+#
+#  1. A production container has no business shipping a package manager.
+#     npm can reach the network and write to disk; if an RCE lands in the
+#     app, npm is a ready-made download-and-execute primitive.
+#
+#  2. npm BUNDLES ITS OWN dependency tree, and the node:24-alpine base
+#     image's npm bundles undici 6.26.0 — CVE-2026-12151, a HIGH-severity
+#     DoS. No `overrides` entry in OUR package.json can fix that, because
+#     it is not in our tree. Trivy's IMAGE scan found it; the filesystem
+#     scan structurally cannot see it.
+#
+# The app does not need npm to run: Next is invoked directly.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/bin/npm \
+           /usr/local/bin/npx
+
 USER nextjs
 
 EXPOSE 3000
@@ -48,4 +67,5 @@ ENV HOSTNAME=0.0.0.0
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
 
-CMD ["npm", "run", "start"]
+# Invoke Next directly — `npm run start` would need the npm we just removed.
+CMD ["./node_modules/.bin/next", "start"]
