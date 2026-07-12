@@ -1,0 +1,230 @@
+import type { PrismaClient } from '@prisma/client';
+
+import { SlotTakenError, cancelBooking, createBooking } from '@/app-layer/usecases/booking';
+
+import { prismaTestClient, seedTenant, type SeededTenant } from '../helpers/db';
+import { asAppSuperuser } from '../helpers/rls';
+
+const HOUR = 3_600_000;
+const at = (h: number) => new Date(Date.now() + h * HOUR);
+
+describe('booking golden path', () => {
+  const prisma = prismaTestClient();
+  let t: SeededTenant;
+  let courtId: string;
+
+  beforeEach(async () => {
+    t = await seedTenant();
+    await asAppSuperuser(prisma, async (tx) => {
+      const venue = await tx.venue.create({
+        data: {
+          tenantId: t.tenantId,
+          slug: 'sofia-padel',
+          name: 'Sofia Padel',
+          addressLine: '1',
+          city: 'Sofia',
+          email: 'v@playerz.test',
+          lat: 42.7,
+          lng: 23.3,
+        },
+      });
+      const court = await tx.court.create({
+        data: {
+          tenantId: t.tenantId,
+          venueId: venue.id,
+          name: 'Court 1',
+          sport: 'PADEL',
+          surface: 'ARTIFICIAL_GRASS',
+          basePriceCents: 2400,
+        },
+      });
+      courtId = court.id;
+    });
+  });
+
+  const mk = (db: PrismaClient, o: Partial<Parameters<typeof createBooking>[2]> = {}) =>
+    createBooking(db, t.tenantId, {
+      courtId,
+      startTs: at(24),
+      endTs: at(25),
+      totalCents: 2400,
+      idempotencyKey: `k-${Math.random().toString(36).slice(2)}`,
+      bookedByUserId: t.userId,
+      ...o,
+    });
+
+  it('creates a PENDING booking with a 15-minute expiry', async () => {
+    const r = await asAppSuperuser(prisma, (tx) => mk(tx));
+
+    expect(r.status).toBe('PENDING');
+    expect(r.idempotentReplay).toBe(false);
+
+    // A PENDING booking HOLDS the slot (the EXCLUDE constraint counts it).
+    // Without the expiry, an abandoned checkout holds the court forever.
+    const ttl = r.expiresAt.getTime() - Date.now();
+    expect(ttl).toBeGreaterThan(14 * 60_000);
+    expect(ttl).toBeLessThanOrEqual(15 * 60_000 + 1000);
+  });
+
+  it('a repeated idempotencyKey returns the ORIGINAL booking, not a second one', async () => {
+    const key = 'stable-key';
+
+    const first = await asAppSuperuser(prisma, (tx) => mk(tx, { idempotencyKey: key }));
+    const second = await asAppSuperuser(prisma, (tx) => mk(tx, { idempotencyKey: key }));
+
+    // The difference between a flaky mobile network and a double charge:
+    // the user tapped once, the request timed out, the app retried. They
+    // must end up with ONE booking — and not an error page in front of a
+    // booking that actually succeeded.
+    expect(second.bookingId).toBe(first.bookingId);
+    expect(second.idempotentReplay).toBe(true);
+
+    const count = await asAppSuperuser(prisma, (tx) => tx.booking.count());
+    expect(count).toBe(1);
+  });
+
+  it('TWO GENUINELY CONCURRENT bookings for one slot: exactly one wins', async () => {
+    // THE test. This is the scenario a check-then-insert implementation
+    // passes every unit test for and then fails on a busy Saturday: both
+    // requests read "free", both insert, the court is sold twice.
+    //
+    // Both promises are started BEFORE either is awaited, so they really do
+    // race inside Postgres.
+    const a = prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL ROLE app_superuser`);
+      return mk(tx as unknown as PrismaClient, { idempotencyKey: 'race-a' });
+    });
+    const b = prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL ROLE app_superuser`);
+      return mk(tx as unknown as PrismaClient, { idempotencyKey: 'race-b' });
+    });
+
+    const results = await Promise.allSettled([a, b]);
+
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    // The loser must get a clean domain error, not a raw Postgres 500.
+    const err = (rejected[0] as PromiseRejectedResult).reason;
+    expect(err).toBeInstanceOf(SlotTakenError);
+    expect((err as SlotTakenError).code).toBe('slot_taken');
+
+    // And the database really does hold exactly one.
+    const count = await asAppSuperuser(prisma, (tx) => tx.booking.count());
+    expect(count).toBe(1);
+  });
+
+  it('the idempotency pre-check runs BEFORE the insert, not as error recovery', async () => {
+    // Regression pin for a bug that only appears on a real retry.
+    //
+    // The obvious implementation catches the unique violation and then
+    // re-reads the original row. That CANNOT work: a constraint violation
+    // ABORTS the Postgres transaction, so the recovery read fails with
+    // "current transaction is aborted" — a second, more confusing error on
+    // top of the first. The user taps Book once, the network stalls, the app
+    // retries, and they get a 500 while their booking actually exists.
+    //
+    // Proof the pre-check is what handles it: a replay inside a transaction
+    // that is STILL USABLE afterwards. If recovery-by-catch had been used,
+    // the transaction would be poisoned and this follow-up query would throw.
+    const key = 'pre-check-key';
+    await asAppSuperuser(prisma, (tx) => mk(tx, { idempotencyKey: key }));
+
+    const stillUsable = await asAppSuperuser(prisma, async (tx) => {
+      const replay = await mk(tx, { idempotencyKey: key });
+      expect(replay.idempotentReplay).toBe(true);
+      // The transaction is healthy — this would throw if the replay had gone
+      // through a constraint violation.
+      return tx.booking.count();
+    });
+
+    expect(stillUsable).toBe(1);
+  });
+
+  it('a sequential overlapping booking is rejected with slot_taken', async () => {
+    await asAppSuperuser(prisma, (tx) => mk(tx));
+
+    await expect(
+      asAppSuperuser(prisma, (tx) => mk(tx, { startTs: at(24.5), endTs: at(25.5) })),
+    ).rejects.toBeInstanceOf(SlotTakenError);
+  });
+
+  it('a booking with no user and no guest contact is refused', async () => {
+    // Nobody to confirm, remind, or refund is not a booking — it is a slot
+    // that quietly disappears.
+    await expect(
+      asAppSuperuser(prisma, (tx) => mk(tx, { bookedByUserId: null, guestContact: null })),
+    ).rejects.toThrow(/attributable to someone/);
+  });
+
+  it('a GUEST booking is a first-class flow', async () => {
+    const r = await asAppSuperuser(prisma, (tx) =>
+      mk(tx, {
+        bookedByUserId: null,
+        guestContact: { name: 'Ivan', email: 'ivan@example.com', phone: '+359888' },
+      }),
+    );
+
+    const row = await asAppSuperuser(prisma, (tx) =>
+      tx.booking.findUniqueOrThrow({ where: { id: r.bookingId } }),
+    );
+    expect(row.guestEmail).toBe('ivan@example.com');
+    expect(row.bookedByUserId).toBeNull();
+  });
+
+  describe('cancellation', () => {
+    it('> 24h out → 100% refund, written onto the receipt', async () => {
+      const b = await asAppSuperuser(prisma, (tx) => mk(tx, { startTs: at(48), endTs: at(49) }));
+
+      const res = await asAppSuperuser(prisma, (tx) =>
+        cancelBooking(tx, t.tenantId, { bookingId: b.bookingId, cancelledByUserId: t.userId }),
+      );
+
+      expect(res.refundPercent).toBe(100);
+      expect(res.refundAmountCents).toBe(2400);
+
+      // The resolved percentage is STORED. The venue's policy may change
+      // next month; this receipt must not.
+      const receipt = await asAppSuperuser(prisma, (tx) =>
+        tx.cancellation.findUniqueOrThrow({ where: { bookingId: b.bookingId } }),
+      );
+      expect(receipt.refundPercent).toBe(100);
+      expect(receipt.refundAmountCents).toBe(2400);
+    });
+
+    it('12–24h out → 50% refund', async () => {
+      const b = await asAppSuperuser(prisma, (tx) => mk(tx, { startTs: at(20), endTs: at(21) }));
+
+      const res = await asAppSuperuser(prisma, (tx) =>
+        cancelBooking(tx, t.tenantId, { bookingId: b.bookingId }),
+      );
+      expect(res.refundPercent).toBe(50);
+      expect(res.refundAmountCents).toBe(1200);
+    });
+
+    it('< 12h out → no refund', async () => {
+      const b = await asAppSuperuser(prisma, (tx) => mk(tx, { startTs: at(6), endTs: at(7) }));
+
+      const res = await asAppSuperuser(prisma, (tx) =>
+        cancelBooking(tx, t.tenantId, { bookingId: b.bookingId }),
+      );
+      expect(res.refundPercent).toBe(0);
+    });
+
+    it('cancelling FREES the slot for someone else', async () => {
+      const first = await asAppSuperuser(prisma, (tx) => mk(tx));
+
+      await asAppSuperuser(prisma, (tx) =>
+        cancelBooking(tx, t.tenantId, { bookingId: first.bookingId }),
+      );
+
+      // The EXCLUDE constraint's WHERE clause excludes CANCELLED. Without
+      // it, a cancellation would hold the court hostage forever.
+      const second = await asAppSuperuser(prisma, (tx) => mk(tx));
+      expect(second.bookingId).not.toBe(first.bookingId);
+    });
+  });
+});
