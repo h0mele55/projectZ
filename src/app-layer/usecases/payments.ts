@@ -1,0 +1,264 @@
+import { createHash, randomBytes } from 'node:crypto';
+
+import type { PrismaClient } from '@prisma/client';
+
+import {
+  PayoutsNotEnabledError,
+  createDestinationCharge,
+  refundWithFeeReversal,
+} from '@/lib/billing/connect';
+import { refundSplit } from '@/lib/billing/platform-fee';
+
+import { assertSharesSumToTotal, partitionEqually } from './booking-split';
+import { spendCredit } from './wallet';
+
+/**
+ * Checkout, refunds, and split links.
+ *
+ * The order of operations in `checkoutBooking` is the whole point of the file.
+ */
+
+export class VenueNotPayableError extends Error {
+  readonly code = 'venue_not_payable';
+  constructor(message: string) {
+    super(message);
+    this.name = 'VenueNotPayableError';
+  }
+}
+
+/** A split link expires; an unpaid share does not hang over a booking forever. */
+export const SPLIT_LINK_TTL_HOURS = 48;
+
+/**
+ * Pay for a booking: wallet first, card for the remainder.
+ *
+ * ─── Why the payouts check comes FIRST ───────────────────────────────
+ *
+ * Stripe rejects a destination charge to an account that cannot receive
+ * payouts. If we discover that during `paymentIntents.create`, the customer has
+ * already entered their card and sees a payment failure — for a problem that is
+ * entirely the club's incomplete onboarding. Check before we ask for a card.
+ *
+ * ─── Why the wallet is spent BEFORE the card is charged ──────────────
+ *
+ * If the card were charged first and the wallet debit then failed, the customer
+ * has paid full price with credit still sitting in their account. Spending the
+ * credit first means the worst case is the opposite: credit is debited and the
+ * card charge fails, and we refund the credit — a compensating LEDGER ENTRY,
+ * which is exactly the operation an append-only ledger is built for.
+ *
+ * Neither ordering is atomic across two systems. This one fails in the
+ * direction we can actually repair.
+ */
+export async function checkoutBooking(
+  db: PrismaClient,
+  input: {
+    tenantId: string;
+    userId: string;
+    bookingId: string;
+    useWallet?: boolean;
+  },
+): Promise<{
+  walletAppliedCents: number;
+  cardDueCents: number;
+  paymentIntentId: string | null;
+  clientSecret: string | null;
+}> {
+  const booking = await db.booking.findFirstOrThrow({
+    where: { id: input.bookingId, tenantId: input.tenantId },
+  });
+
+  const venue = await db.venueOrg.findUniqueOrThrow({ where: { id: input.tenantId } });
+
+  if (!venue.stripeAccountId || !venue.payoutsEnabled) {
+    throw new PayoutsNotEnabledError(venue.name);
+  }
+
+  // ── 1. Wallet ──────────────────────────────────────────────────────
+  const { walletAppliedCents, cardDueCents } = input.useWallet
+    ? await spendCredit(db, {
+        tenantId: input.tenantId,
+        userId: input.userId,
+        amountCents: booking.totalCents,
+        bookingId: booking.id,
+      })
+    : { walletAppliedCents: 0, cardDueCents: booking.totalCents };
+
+  // Credit covered the lot. Do not create a zero-amount PaymentIntent —
+  // Stripe rejects it, and there is nothing to charge.
+  if (cardDueCents === 0) {
+    return { walletAppliedCents, cardDueCents: 0, paymentIntentId: null, clientSecret: null };
+  }
+
+  // ── 2. Card ────────────────────────────────────────────────────────
+  //
+  // The idempotency key is derived from what makes this charge unique. Two
+  // taps on Pay produce the same key, and Stripe returns the SAME
+  // PaymentIntent rather than charging the customer twice.
+  const intent = await createDestinationCharge({
+    totalCents: cardDueCents,
+    currency: venue.currency,
+    tier: venue.planTier,
+    stripeAccountId: venue.stripeAccountId,
+    bookingId: booking.id,
+    idempotencyKey: `booking:${booking.id}:card:${cardDueCents}`,
+  });
+
+  await db.booking.update({
+    where: { id: booking.id },
+    data: { stripePaymentIntentId: intent.id },
+  });
+
+  return {
+    walletAppliedCents,
+    cardDueCents,
+    paymentIntentId: intent.id,
+    clientSecret: intent.client_secret ?? null,
+  };
+}
+
+/**
+ * Refund a booking, giving back our commission in proportion.
+ *
+ * The customer's refund may be partial (a late cancellation forfeits some of
+ * it). Whatever the amount, the venue's transfer and our fee are both reversed
+ * pro rata — see `refundSplit`.
+ */
+export async function refundBooking(
+  db: PrismaClient,
+  input: { tenantId: string; bookingId: string; refundCents: number },
+): Promise<{ feeReversedCents: number; transferReversedCents: number; refundId: string }> {
+  const booking = await db.booking.findFirstOrThrow({
+    where: { id: input.bookingId, tenantId: input.tenantId },
+  });
+
+  if (!booking.stripePaymentIntentId) {
+    throw new Error(`Booking ${booking.id} has no payment to refund.`);
+  }
+
+  const venue = await db.venueOrg.findUniqueOrThrow({ where: { id: input.tenantId } });
+
+  const { feeReversedCents, transferReversedCents } = refundSplit(
+    booking.totalCents,
+    input.refundCents,
+    venue.planTier,
+  );
+
+  const refund = await refundWithFeeReversal({
+    paymentIntentId: booking.stripePaymentIntentId,
+    refundCents: input.refundCents,
+    feeReversedCents,
+    // Refunding twice would return the money twice. The amount is IN the key:
+    // a second refund of a different amount is a legitimately different
+    // operation, a repeat of the same one is not.
+    idempotencyKey: `refund:${booking.id}:${input.refundCents}`,
+  });
+
+  // Record the refund as its OWN row rather than mutating a running total on
+  // the booking. Two partial refunds are two facts, each with its own amount,
+  // reason and Stripe id — collapsing them into one number on the booking
+  // destroys the ability to answer "what was refunded, and why?".
+  await db.refund.create({
+    data: {
+      tenantId: input.tenantId,
+      bookingId: booking.id,
+      amountCents: input.refundCents,
+      currency: venue.currency,
+      providerRefId: refund.id,
+      status: 'PAID',
+      processedAt: new Date(),
+    },
+  });
+
+  // Only a FULL refund cancels the booking. A partial one (a late-cancellation
+  // fee withheld, say) leaves the booking exactly as it was.
+  const refundedSoFar = await db.refund.aggregate({
+    where: { tenantId: input.tenantId, bookingId: booking.id, status: 'PAID' },
+    _sum: { amountCents: true },
+  });
+
+  if ((refundedSoFar._sum.amountCents ?? 0) >= booking.totalCents) {
+    await db.booking.update({
+      where: { id: booking.id },
+      data: { status: 'CANCELLED', cancelledAt: new Date() },
+    });
+  }
+
+  return { feeReversedCents, transferReversedCents, refundId: refund.id };
+}
+
+/**
+ * Split a booking N ways and mint one payment link per person.
+ *
+ * The raw token is returned ONCE, to be emailed. Only its hash is stored —
+ * a leaked database backup must not hand an attacker every open payment link
+ * in the system. Same reasoning as a password: we never need the original back,
+ * only to recognise it when it is presented.
+ */
+export async function createSplit(
+  db: PrismaClient,
+  input: {
+    tenantId: string;
+    bookingId: string;
+    /** The booker plus everyone they are splitting with. */
+    participants: Array<{ userId?: string; inviteEmail?: string }>;
+    /** Omit for an equal split. Must sum to the booking total if given. */
+    customShares?: number[];
+  },
+): Promise<Array<{ splitId: string; token: string; shareCents: number }>> {
+  const booking = await db.booking.findFirstOrThrow({
+    where: { id: input.bookingId, tenantId: input.tenantId },
+  });
+
+  const shares =
+    input.customShares ?? partitionEqually(booking.totalCents, input.participants.length);
+
+  if (shares.length !== input.participants.length) {
+    throw new Error(`${shares.length} shares for ${input.participants.length} participants.`);
+  }
+
+  // Belt and braces: `partitionEqually` sums correctly by construction, but a
+  // caller-supplied `customShares` has had no such guarantee applied to it.
+  assertSharesSumToTotal(shares, booking.totalCents);
+
+  const expiresAt = new Date(Date.now() + SPLIT_LINK_TTL_HOURS * 3600 * 1000);
+
+  const created = await Promise.all(
+    input.participants.map(async (p, i) => {
+      // 32 bytes from a CSPRNG. A guessable token is a stranger paying — or
+      // more to the point, a stranger READING someone's booking.
+      const token = randomBytes(32).toString('base64url');
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+
+      const split = await db.bookingSplit.create({
+        data: {
+          tenantId: input.tenantId,
+          bookingId: booking.id,
+          userId: p.userId ?? null,
+          inviteEmail: p.inviteEmail ?? null,
+          shareCents: shares[i]!,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      return { splitId: split.id, token, shareCents: split.shareCents };
+    }),
+  );
+
+  return created;
+}
+
+/** Look a split up by the token the user presented. Constant-time by hashing. */
+export async function findSplitByToken(db: PrismaClient, token: string) {
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+
+  const split = await db.bookingSplit.findUnique({ where: { tokenHash } });
+  if (!split) return null;
+
+  // An expired link is not a payable link. Checked here rather than only in the
+  // UI, because the UI is not what a POST has to get past.
+  if (split.expiresAt.getTime() < Date.now()) return null;
+
+  return split;
+}

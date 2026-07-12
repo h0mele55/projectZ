@@ -67,6 +67,17 @@ export const handlers = [
       currency: body?.currency ?? 'eur',
       status: 'requires_payment_method',
       client_secret: `${id}_secret_test`,
+      // Echo the Connect fields back. Stripe form-encodes nested params, so
+      // `transfer_data[destination]` arrives as a FLAT key — a test asserting
+      // on `body.transfer_data.destination` would read `undefined` and pass
+      // for the wrong reason.
+      application_fee_amount: body?.application_fee_amount
+        ? Number(body.application_fee_amount)
+        : null,
+      transfer_data: body?.['transfer_data[destination]']
+        ? { destination: body['transfer_data[destination]'] }
+        : null,
+      on_behalf_of: body?.on_behalf_of ?? null,
       metadata: {},
     });
   }),
@@ -87,6 +98,42 @@ export const handlers = [
       amount: Number(body?.amount ?? 0),
       payment_intent: body?.payment_intent ?? null,
       status: 'succeeded',
+    });
+  }),
+
+  // ── Stripe Connect ────────────────────────────────────────────────
+  //
+  // A connected account starts with payouts DISABLED — which is the real
+  // behaviour, and the one that matters. An express account cannot receive
+  // a destination charge until the club has finished onboarding, and a mock
+  // that returns `payouts_enabled: true` immediately would let the
+  // "charge an un-onboarded venue" bug pass every test we have.
+  http.post('https://api.stripe.com/v1/accounts', async ({ request }) => {
+    await record(request);
+    return HttpResponse.json({
+      id: `acct_test_${Math.random().toString(36).slice(2, 12)}`,
+      object: 'account',
+      charges_enabled: false,
+      payouts_enabled: false,
+      details_submitted: false,
+    });
+  }),
+
+  http.post('https://api.stripe.com/v1/account_links', async ({ request }) => {
+    await record(request);
+    return HttpResponse.json({
+      object: 'account_link',
+      url: 'https://connect.stripe.com/setup/e/acct_test/onboarding',
+      expires_at: 1893456000,
+    });
+  }),
+
+  http.post('https://api.stripe.com/v1/subscriptions', async ({ request }) => {
+    await record(request);
+    return HttpResponse.json({
+      id: `sub_test_${Math.random().toString(36).slice(2, 12)}`,
+      object: 'subscription',
+      status: 'active',
     });
   }),
 

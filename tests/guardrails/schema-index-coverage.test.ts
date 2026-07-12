@@ -197,10 +197,17 @@ describe('schema index coverage', () => {
     },
   ];
 
-  it.each(LIST_QUERY_INDEXES.map((e) => [e.model, e.index.join(' + '), e.why] as const))(
-    'C: %s has an index on [%s] — %s',
-    (modelName, _cols, _why) => {
-      const entry = LIST_QUERY_INDEXES.find((e) => e.model === modelName)!;
+  // Indexed by POSITION, not looked up by model name.
+  //
+  // The previous version did `LIST_QUERY_INDEXES.find(e => e.model === modelName)`,
+  // which returns the FIRST entry for that model — so a second entry for the
+  // same model silently re-tested the first one and asserted nothing. That is
+  // how `Resource[tenantId, resourceType]` sat missing from the schema while
+  // this ratchet reported green.
+  it.each(LIST_QUERY_INDEXES.map((e, i) => [i, e.model, e.index.join(' + '), e.why] as const))(
+    'C: [%i] %s has an index on [%s] — %s',
+    (i, modelName, _cols, _why) => {
+      const entry = LIST_QUERY_INDEXES[i]!;
       const model = models.find((m) => m.name === modelName)!;
 
       const present = [...model.indexes, ...model.uniques].some(

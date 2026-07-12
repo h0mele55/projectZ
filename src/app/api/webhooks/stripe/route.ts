@@ -1,5 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import type Stripe from 'stripe';
 
+import {
+  handleAccountUpdated,
+  handleInvoicePaid,
+  handleSubscriptionDeleted,
+} from '@/lib/billing/webhook-handlers';
+import { prisma } from '@/lib/db/prisma';
 import { WebhookSignatureError, verifyStripeWebhook } from '@/lib/stripe';
 
 /**
@@ -30,10 +37,29 @@ export async function POST(req: NextRequest) {
     throw e;
   }
 
-  if (event.type !== 'payment_intent.succeeded') {
-    // Acknowledge everything else. A non-2xx makes Stripe retry forever.
-    return NextResponse.json({ received: true, ignored: event.type });
-  }
+  switch (event.type) {
+    case 'payment_intent.succeeded':
+      return NextResponse.json({ received: true, type: event.type });
 
-  return NextResponse.json({ received: true, type: event.type });
+    // The ONLY thing that may set `payoutsEnabled`. See handleAccountUpdated.
+    case 'account.updated': {
+      const r = await handleAccountUpdated(prisma, event.data.object as Stripe.Account);
+      return NextResponse.json({ received: true, type: event.type, ...r });
+    }
+
+    case 'invoice.paid': {
+      const r = await handleInvoicePaid(prisma, event.data.object as Stripe.Invoice);
+      return NextResponse.json({ received: true, type: event.type, ...r });
+    }
+
+    case 'customer.subscription.deleted': {
+      const r = await handleSubscriptionDeleted(prisma, event.data.object as Stripe.Subscription);
+      return NextResponse.json({ received: true, type: event.type, ...r });
+    }
+
+    default:
+      // Acknowledge everything else. A non-2xx makes Stripe retry forever —
+      // and an event we do not handle is not an error, it is just noise.
+      return NextResponse.json({ received: true, ignored: event.type });
+  }
 }

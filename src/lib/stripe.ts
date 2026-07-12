@@ -14,6 +14,23 @@ export function stripe(): Stripe {
     client = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', {
       apiVersion: '2025-02-24.acacia' as never,
       maxNetworkRetries: 2,
+
+      // Use fetch rather than the SDK's default Node `http` transport.
+      //
+      // Two reasons, and the second is the important one:
+      //
+      //   1. It is the transport that works everywhere — Node, edge, workers.
+      //
+      //   2. It is the transport our TESTS can see. MSW intercepts fetch; it
+      //      does not reliably intercept the SDK's raw `http.request`. With the
+      //      default client, every Stripe handler in tests/helpers/msw.ts was
+      //      silently bypassed — the SDK went to the real network, the tests
+      //      hung, and nothing was asserting on what we actually send Stripe.
+      //
+      //      Pinning this here means the code path under test is the SAME code
+      //      path that runs in production. A test that exercises a different
+      //      transport than production is not testing production.
+      httpClient: Stripe.createFetchHttpClient(),
     });
   }
   return client;
