@@ -180,18 +180,35 @@ export function sanitizePlainText(input: string | null | undefined): string {
     allowedTags: [],
     allowedAttributes: {},
   });
-  // sanitize-html re-encodes `<`/`>`/`&` as entities even after
-  // stripping tags. Decode the canonical handful so the stored value
-  // is the literal text a user would expect.
+  // sanitize-html re-encodes `<`/`>`/`&` as entities even after stripping
+  // tags. Decode the canonical handful so the stored value is the literal
+  // text a user would expect.
+  //
+  // ORDER IS SECURITY-CRITICAL. `&amp;` MUST be decoded LAST.
+  //
+  // Decoding it first is a double-unescape: the input
+  //
+  //     &amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;
+  //
+  // becomes `&lt;script&gt;…` after the `&amp;` pass, and then
+  // `<script>alert(1)</script>` after the `&lt;` pass — the sanitiser
+  // RESURRECTS the very tag it just stripped. Per this function's own
+  // contract the result is later written to a surface that decodes
+  // entities (a Markdown renderer, an email body), so that is stored XSS.
+  //
+  // Decoding `&amp;` last means an `&` produced by that pass can no longer
+  // be re-consumed as the start of another entity. Flagged by CodeQL
+  // (js/double-escaping) and pinned by a test in
+  // tests/unit/lib/sanitize.test.ts.
   return stripped
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#x27;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&#x2F;/g, '/')
-    .replace(/&#47;/g, '/');
+    .replace(/&#47;/g, '/')
+    .replace(/&amp;/g, '&');
 }
 
 // ─── Convenience helpers ────────────────────────────────────────────

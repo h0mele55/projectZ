@@ -77,3 +77,32 @@ which was the entire basis of the distinction.
 Note: hiding a nav link is a **UI courtesy, not a security control**. The
 link is still reachable by typing the URL. P07's permission middleware is
 what actually denies access.
+
+## CodeQL found a real stored-XSS bug in the ported sanitiser
+
+`sanitizePlainText` strips tags, then decodes HTML entities so the stored
+value is the literal text the user typed. It decoded `&amp;` **first**.
+
+That is a double-unescape. Given the input
+
+    &amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;
+
+the `&amp;` pass produces `&lt;script&gt;alert(1)&lt;/script&gt;`, and the
+`&lt;` pass that follows turns _that_ into a live
+`<script>alert(1)</script>`. The sanitiser **resurrects the very tag it just
+stripped**, and per its own contract the result is later written to a
+surface that decodes entities (a Markdown renderer, an email body).
+
+playerz runs exactly the fields you would least want this on through it:
+`Booking.notes`, `Coach.bio`, `SessionChatMessage.body` — all free text one
+user writes and another reads.
+
+Fix: decode `&amp;` **last**, so an `&` produced by that pass can no longer
+be re-consumed as the opening of another entity.
+
+**Verified by negative control:** restoring the original order makes
+`tests/unit/lib/sanitize.test.ts` emit a live `<script>alert(1)</script>`
+and `<img src=x onerror=alert(1)>`; with the fix, both are inert.
+
+This bug is present in the port source (`inflect-compliance`) and is worth
+reporting upstream.
