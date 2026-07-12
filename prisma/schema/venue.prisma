@@ -207,6 +207,24 @@ model Review {
   /// Encrypted at rest + sanitised — free text a stranger will read.
   body         String?
 
+  /// PROOF OF VISIT. A review must point at a booking the author actually
+  /// completed. Without this, the review section is an open comment box: a
+  /// rival club can leave one-stars, and a venue can leave itself five-stars,
+  /// without either ever setting foot on the court.
+  ///
+  /// Unique: one review per booking. Otherwise a single visit is worth as many
+  /// reviews as the author has patience for.
+  bookingId String? @unique
+
+  /// Nothing is visible until it has been through moderation. The default is
+  /// PENDING_REVIEW, not PUBLISHED — a row created by a code path that forgets
+  /// to moderate is INVISIBLE, rather than unmoderated-and-live.
+  status ReviewStatus @default(PENDING_REVIEW)
+
+  /// What the classifier saw. Kept so a human reviewing the case can judge the
+  /// machine as well as the text.
+  moderationScoresJson Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -214,6 +232,7 @@ model Review {
 
   @@unique([venueId, authorUserId])
   @@index([tenantId])
+  @@index([venueId, status, createdAt])
   @@index([venueId, createdAt])
   @@index([authorUserId])
   @@map("review")
