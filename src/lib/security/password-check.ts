@@ -41,6 +41,22 @@ export interface BreachCheckResult {
  * existing.
  */
 export async function checkPasswordAgainstHIBP(password: string): Promise<BreachCheckResult> {
+  // ── Why SHA-1 here is correct, and not a password-hashing weakness ──
+  //
+  // CodeQL flags this as `js/insufficient-password-hash`. It is a false
+  // positive, and the distinction matters:
+  //
+  //   - This digest is NEVER stored and NEVER used to authenticate anyone.
+  //     Password storage is bcrypt at 12 rounds — see lib/auth/passwords.ts.
+  //   - SHA-1 is MANDATED by HIBP's range API. It is the protocol. Using a
+  //     stronger digest here would simply not work: the server has no
+  //     bcrypt/argon2 index to query.
+  //   - Only the first FIVE hex characters ever leave this process
+  //     (k-anonymity), and HIBP returns ~500 candidate suffixes. It cannot
+  //     tell which one we were asking about.
+  //
+  // The alert is dismissed in the Security tab with this rationale rather
+  // than suppressed silently.
   const sha1 = createHash('sha1').update(password, 'utf8').digest('hex').toUpperCase();
   const prefix = sha1.slice(0, 5);
   const suffix = sha1.slice(5);
