@@ -1,0 +1,86 @@
+enum SplitStatus {
+  PENDING
+  PAID
+  WAIVED
+  EXPIRED
+}
+
+enum LedgerReason {
+  SPLIT_REIMBURSEMENT
+  REFUND_CREDIT
+  ADMIN_ADJUST
+  SPEND
+}
+
+/// One person's share of a split booking.
+///
+/// INVARIANT: sum(shareCents) over a booking's splits == booking.totalCents.
+/// Not "approximately". If the shares do not sum exactly, someone is charged
+/// for a booking nobody paid for, or the venue is paid less than it billed —
+/// and it compounds silently across every split until an accountant finds it.
+model BookingSplit {
+  id        String @id @default(cuid())
+  tenantId  String
+  bookingId String
+
+  /// Either a registered player…
+  userId      String?
+  /// …or an email — a split link must work for someone with no account.
+  inviteEmail String?
+
+  shareCents Int
+  status     SplitStatus @default(PENDING)
+
+  paymentIntentId String?
+  paidAt          DateTime?
+  /// Unpaid at this point → EXPIRED, and the booker absorbs it (v1 policy).
+  expiresAt       DateTime
+
+  /// Hashed. The raw token is emailed once and never stored — a leaked
+  /// database must not hand an attacker every open payment link.
+  tokenHash String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([bookingId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("booking_split")
+}
+
+/// APPEND-ONLY. Enforced by a database trigger, not by convention.
+///
+/// A wallet is a ledger, and a ledger you can UPDATE is not a ledger — it is a
+/// mutable number with extra steps. The whole value of the append-only shape is
+/// that a balance can be RECONSTRUCTED and DISPUTED: "you say I have €12, prove
+/// it" must be answerable by replaying the entries.
+///
+/// The trigger raises on UPDATE and DELETE. Application code cannot bypass it,
+/// a migration cannot forget it, and a repository with a bug cannot silently
+/// rewrite history.
+model CreditLedgerEntry {
+  id       String @id @default(cuid())
+  tenantId String
+  userId   String
+
+  /// Signed. Negative for a spend, positive for a credit.
+  deltaCents Int
+  reason     LedgerReason
+
+  refType String?
+  refId   String?
+
+  /// The running balance AFTER this entry. Denormalised so a balance read is
+  /// one indexed row, not a SUM over the user's entire history.
+  balanceAfterCents Int
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, userId, createdAt])
+  @@index([refType, refId])
+  @@map("credit_ledger_entry")
+}

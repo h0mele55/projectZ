@@ -36,7 +36,23 @@ model VenueOrg {
   encryptedDek         String?
   previousEncryptedDek String?
 
+  // ── Stripe Connect ──────────────────────────────────────────────
+  //
+  // `payoutsEnabled` is NOT a convenience flag we set when onboarding
+  // "looks done". It mirrors what Stripe told us in `account.updated`.
+  //
+  // Stripe refuses a destination charge to an account that cannot receive
+  // payouts, so charging against an un-onboarded venue fails AFTER the
+  // customer has entered their card — they see a card error for a problem
+  // that is entirely the club's. We check this before checkout instead.
   stripeAccountId String?
+  payoutsEnabled  Boolean @default(false)
+
+  // The venue's OWN subscription to us (Stripe Billing), which sets planTier
+  // and therefore the commission bps. Distinct from stripeAccountId, which is
+  // the connected account we pay OUT to.
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
 
   // E2E cleanup marker — an isolated-tenant fixture stamps its run id here
   // so teardown is unambiguous even when a spec crashes mid-way.

@@ -52,6 +52,12 @@ model Venue {
   @@index([city, country])
   @@index([tenantId, status])
   @@index([city, country, status])
+  // The GiST index behind every "venues near me" query. Declared HERE — not
+  // only in SQL — because `migrate diff` compares the live database to this
+  // schema, and anything it cannot see looks like drift to be removed. It
+  // proposed `DROP INDEX "venue_geog_idx"` in four separate unrelated
+  // migrations before this line existed.
+  @@index([geog], map: "venue_geog_idx", type: Gist)
   @@map("venue")
 }
 
@@ -103,6 +109,7 @@ model Resource {
   @@index([tenantId, venueId, sport])
   @@index([tenantId, status])
   @@index([tenantId, venueId, sport, status])
+  @@index([tenantId, resourceType])
   @@index([venueId])
   @@map("court")
 }
