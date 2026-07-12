@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "0 3 * * 1"
+    - cron: '0 3 * * 1'
   workflow_dispatch:
 
 concurrency:
@@ -17,13 +17,14 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: "24"
+  NODE_VERSION: '24'
   # Test stack — mirrors docker-compose.test.yml's alternate ports.
-  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/playerz_test"
-  REDIS_URL: "redis://localhost:6379"
-  SKIP_ENV_VALIDATION: "1"
-  NEXTAUTH_SECRET: "ci-test-secret-not-a-real-key"
-  NEXTAUTH_URL: "http://localhost:3000"
+  DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/playerz_test'
+  REDIS_URL: 'redis://localhost:6379'
+  SKIP_ENV_VALIDATION: '1'
+  # Throwaway value so NextAuth can boot in CI. Authenticates nothing.
+  NEXTAUTH_SECRET: 'ci-test-secret-not-a-real-key' # pragma: allowlist secret
+  NEXTAUTH_URL: 'http://localhost:3000'
 
 jobs:
   # ═══════════════════════════════════════════════════════════════
@@ -114,10 +115,10 @@ jobs:
         uses: ./.github/actions/setup-node-prisma
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: "Run tests: unit + rendered"
+      - name: 'Run tests: unit + rendered'
         if: needs.preflight.outputs.has_app == 'true'
         run: npm test
-      - name: "Run tests: architectural guardrails"
+      - name: 'Run tests: architectural guardrails'
         if: needs.preflight.outputs.has_app == 'true'
         run: npm run test:guardrails
       - name: Upload JUnit report
@@ -143,13 +144,13 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: playerz_test
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready --health-interval 10s
           --health-timeout 5s --health-retries 5
       redis:
         image: redis:7
-        ports: ["6379:6379"]
+        ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping" --health-interval 10s
           --health-timeout 5s --health-retries 5
@@ -183,7 +184,7 @@ jobs:
           else
             echo "No Prisma schema yet — skipping."
           fi
-      - name: "Run tests: integration"
+      - name: 'Run tests: integration'
         if: needs.preflight.outputs.has_app == 'true'
         run: |
           if [ -n "$(find tests/integration -name '*.test.ts' 2>/dev/null)" ]; then
@@ -191,6 +192,81 @@ jobs:
           else
             echo "No integration tests yet."
           fi
+
+  # ═══════════════════════════════════════════════════════════════
+  #  Job 4b: Coverage
+  #
+  #  REPORTING-ONLY until P12. The floor (70% on src/lib + src/app-layer)
+  #  is a P12 deliverable — P02 ported ~21 lib files that no unit test
+  #  covers yet, so enforcing today would block every PR on debt the
+  #  playbook does not schedule until the end.
+  #
+  #  Enforcement goes through the CLI flag, NOT the config file: jest
+  #  silently ignores a top-level `coverageThreshold` in multi-project
+  #  mode (the run exits 0 however low coverage is). `--coverageThreshold`
+  #  IS honoured. P12 drops `continue-on-error` and adds this to the
+  #  required checks.
+  # ═══════════════════════════════════════════════════════════════
+  coverage:
+    name: Coverage (reporting-only until P12)
+    needs: [preflight]
+    if: needs.preflight.outputs.has_app == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: playerz_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-node-prisma
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Create PostgreSQL roles for RLS
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d playerz_test -v ON_ERROR_STOP=1 <<'SQL'
+            DO $$ BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_user') THEN
+                CREATE ROLE app_user NOLOGIN;
+              END IF;
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_superuser') THEN
+                CREATE ROLE app_superuser NOLOGIN BYPASSRLS;
+              END IF;
+            END $$;
+            GRANT app_user, app_superuser TO postgres;
+          SQL
+
+      - name: Apply migrations
+        run: if [ -d prisma/migrations ]; then npx prisma migrate deploy; fi
+
+      - name: 'Gate: coverage floor'
+        continue-on-error: true
+        run: |
+          npx jest --coverage --runInBand --ci \
+            --coverageThreshold="$(cat jest.thresholds.json)" \
+            --selectProjects unit integration 2>&1 | tee coverage.log
+          if grep -q "coverage threshold" coverage.log; then
+            echo "::warning::Coverage is below the P12 floor. Not blocking yet — P12 makes this required."
+          fi
+
+      - name: Upload coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore
 
   # ═══════════════════════════════════════════════════════════════
   #  Job 5: Build
@@ -233,19 +309,19 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: playerz_test
-        ports: ["5432:5432"]
+        ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready --health-interval 10s
           --health-timeout 5s --health-retries 5
       redis:
         image: redis:7
-        ports: ["6379:6379"]
+        ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping" --health-interval 10s
           --health-timeout 5s --health-retries 5
       mailhog:
         image: mailhog/mailhog:latest
-        ports: ["1025:1025", "8025:8025"]
+        ports: ['1025:1025', '8025:8025']
     steps:
       - uses: actions/checkout@v4
       - if: needs.preflight.outputs.has_e2e == 'true'
@@ -288,8 +364,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: "Gate: secret detection"
-        run: bash scripts/detect-secrets.sh
+      - name: 'Gate: secret detection'
+        run: bash scripts/detect-secrets.sh --all
 
       - name: Dependency review
         if: ${{ github.event_name == 'pull_request' && needs.preflight.outputs.has_app == 'true' }}
@@ -306,13 +382,13 @@ jobs:
 
       # Production deps only: a moderate+ finding here is exploitable
       # surface in shipped code. Weakening this gate is a regression.
-      - name: "Gate: npm audit (moderate+ blocks merge)"
+      - name: 'Gate: npm audit (moderate+ blocks merge)'
         if: needs.preflight.outputs.has_app == 'true'
         run: |
           npm ci --ignore-scripts
           npm audit --omit=dev --audit-level=moderate
 
-      - name: "Info: npm audit (all deps)"
+      - name: 'Info: npm audit (all deps)'
         if: needs.preflight.outputs.has_app == 'true'
         continue-on-error: true
         run: npm audit --audit-level=critical || echo "::warning::vulnerabilities in dev dependencies"
@@ -363,7 +439,7 @@ jobs:
         if: steps.gate.outputs.go == 'true'
         uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{ matrix.language }}"
+          category: '/language:${{ matrix.language }}'
 
   # ═══════════════════════════════════════════════════════════════
   #  Job 9: Trivy — filesystem + dependency vulnerability scan.
@@ -400,7 +476,7 @@ jobs:
           category: trivy-fs
 
       # Blocking gate: CRITICAL/HIGH with a known fix fails the PR.
-      - name: "Gate: Trivy (CRITICAL/HIGH blocks merge)"
+      - name: 'Gate: Trivy (CRITICAL/HIGH blocks merge)'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -408,7 +484,7 @@ jobs:
           format: table
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: '1'
 
       - name: Trivy IaC / misconfiguration scan
         uses: aquasecurity/trivy-action@v0.36.0
@@ -417,7 +493,7 @@ jobs:
           scan-ref: .
           format: table
           severity: CRITICAL,HIGH
-          exit-code: "0"
+          exit-code: '0'
 
   # ═══════════════════════════════════════════════════════════════
   #  Gate: the single required check. Green only if every upstream
