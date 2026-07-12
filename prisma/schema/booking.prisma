@@ -8,7 +8,7 @@
 model Booking {
   id       String @id @default(cuid())
   tenantId String
-  courtId  String
+  resourceId String
 
   startTs DateTime @db.Timestamptz(3)
   endTs   DateTime @db.Timestamptz(3)
@@ -44,7 +44,7 @@ model Booking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  court        Court                @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  resource     Resource             @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   participants BookingParticipant[]
   payments     Payment[]
   refunds      Refund[]
@@ -53,10 +53,10 @@ model Booking {
   session      OpenPlaySession?     @relation("SessionBooking")
 
   @@unique([tenantId, idempotencyKey])
-  @@index([tenantId, courtId, startTs])
+  @@index([tenantId, resourceId, startTs])
   @@index([tenantId, status])
   @@index([bookedByUserId])
-  @@index([courtId])
+  @@index([resourceId])
   @@index([expiresAt])
   @@map("booking")
 }
