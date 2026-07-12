@@ -28,17 +28,38 @@ const VENUES = [
     slug: 'sofia-padel-club',
     name: 'Sofia Padel Club',
     city: 'Sofia',
+    lat: 42.6977,
+    lng: 23.3219,
     contactEmail: 'hello@sofia-padel.bg',
     owner: { email: 'owner@sofia.bg', name: 'Ivan Petrov' },
+    sport: 'PADEL',
+    surface: 'ARTIFICIAL_GRASS',
+    courtCount: 4,
+    basePriceCents: 2400,
   },
   {
     slug: 'plovdiv-tennis-center',
     name: 'Plovdiv Tennis Center',
     city: 'Plovdiv',
+    lat: 42.1354,
+    lng: 24.7453,
     contactEmail: 'hello@plovdiv-tennis.bg',
     owner: { email: 'owner@plovdiv.bg', name: 'Maria Dimitrova' },
+    sport: 'TENNIS',
+    surface: 'CLAY',
+    courtCount: 6,
+    basePriceCents: 3000,
   },
 ] as const;
+
+/** 09:00–22:00, Monday to Sunday. */
+const OPEN_HOUR = 9;
+const CLOSE_HOUR = 22;
+
+/** Postgres `time` columns — only the clock part is stored. */
+function timeOfDay(hour: number): Date {
+  return new Date(Date.UTC(1970, 0, 1, hour, 0, 0));
+}
 
 async function main() {
   if (!/localhost|127\.0\.0\.1|postgres-test|@postgres/.test(url!)) {
@@ -96,7 +117,69 @@ async function main() {
         },
       });
 
-      console.log(`  ✓ ${v.name} — owner ${v.owner.email}`);
+      // ── Venue + courts + availability + one pricing rule ──────────
+      const venue = await tx.venue.upsert({
+        where: { tenantId_slug: { tenantId: org.id, slug: v.slug } },
+        update: {},
+        create: {
+          tenantId: org.id,
+          slug: v.slug,
+          name: v.name,
+          addressLine: `${v.city} Center 1`,
+          city: v.city,
+          country: 'BG',
+          lat: v.lat,
+          lng: v.lng,
+          email: v.contactEmail,
+        },
+      });
+
+      for (let i = 1; i <= v.courtCount; i++) {
+        const existing = await tx.court.findFirst({
+          where: { tenantId: org.id, venueId: venue.id, name: `Court ${i}` },
+        });
+        if (existing) continue;
+
+        const court = await tx.court.create({
+          data: {
+            tenantId: org.id,
+            venueId: venue.id,
+            name: `Court ${i}`,
+            sport: v.sport,
+            surface: v.surface,
+            isIndoor: i % 2 === 0,
+            basePriceCents: v.basePriceCents,
+          },
+        });
+
+        // Open every day, 09:00–22:00.
+        await tx.courtAvailability.createMany({
+          data: Array.from({ length: 7 }, (_, dayOfWeek) => ({
+            tenantId: org.id,
+            courtId: court.id,
+            dayOfWeek,
+            openTime: timeOfDay(OPEN_HOUR),
+            closeTime: timeOfDay(CLOSE_HOUR),
+          })),
+        });
+
+        // Weekend evenings cost 50% more — the rule the pricing engine in
+        // P08 is built to resolve.
+        await tx.pricingRule.create({
+          data: {
+            tenantId: org.id,
+            courtId: court.id,
+            name: 'Weekend peak',
+            priority: 200,
+            conditionsJson: { dayOfWeek: [0, 6], timeRange: { from: '18:00', to: '22:00' } },
+            multiplier: 1.5,
+          },
+        });
+      }
+
+      console.log(
+        `  ✓ ${v.name} — owner ${v.owner.email}, ${v.courtCount} ${v.sport.toLowerCase()} courts`,
+      );
     }
 
     // Platform admin. Global identity, no membership — access comes from
@@ -115,7 +198,6 @@ async function main() {
   });
 
   console.log(`\nSeeded. Password for every account: ${DEV_PASSWORD}`);
-  console.log('Courts + availability land in P05.');
 }
 
 main()

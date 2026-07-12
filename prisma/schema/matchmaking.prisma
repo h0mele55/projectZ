@@ -1,0 +1,98 @@
+model OpenPlaySession {
+  id       String @id @default(cuid())
+  tenantId String
+  courtId  String
+
+  hostUserId String
+  sport      SportType
+
+  startTs DateTime @db.Timestamptz(3)
+  endTs   DateTime @db.Timestamptz(3)
+
+  minSkillLevel   SkillLevel @default(BEGINNER)
+  maxSkillLevel   SkillLevel @default(COMPETITIVE)
+  maxParticipants Int        @default(4)
+  currentCount    Int        @default(0)
+
+  /// "PUBLIC" | "INVITE_ONLY"
+  visibility     String        @default("PUBLIC")
+  joinPriceCents Int           @default(0)
+  status         BookingStatus @default(PENDING)
+
+  /// A host can convert their own booking into an open-play session. The
+  /// booking anchors the court and the capacity; the session layers
+  /// matchmaking on top. Nullable because a session can also be created
+  /// directly by the venue.
+  linkedBookingId String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  court         Court                @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  linkedBooking Booking?             @relation("SessionBooking", fields: [linkedBookingId], references: [id])
+  participants  SessionParticipant[]
+  messages      SessionChatMessage[]
+
+  @@index([tenantId, sport, startTs])
+  @@index([tenantId, status])
+  @@index([courtId])
+  @@index([hostUserId])
+  @@map("open_play_session")
+}
+
+model SessionParticipant {
+  sessionId String
+  userId    String
+
+  joinedAt    DateTime  @default(now())
+  checkedInAt DateTime?
+
+  session OpenPlaySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, userId])
+  @@index([userId])
+  @@map("session_participant")
+}
+
+model SessionChatMessage {
+  id        String @id @default(cuid())
+  tenantId  String
+  sessionId String
+
+  senderUserId String
+  /// Encrypted at rest + HTML-sanitised. User-authored text rendered to
+  /// other users is an XSS surface; treat it as hostile.
+  body         String
+
+  createdAt DateTime @default(now())
+
+  session OpenPlaySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([tenantId])
+  @@index([senderUserId])
+  @@map("session_chat_message")
+}
+
+/// GLOBAL — no tenantId. Skill follows the PLAYER, not the club.
+///
+/// A player's Glicko-2 rating earned at one venue must carry to the next,
+/// otherwise matchmaking at a new club starts from zero and pairs a
+/// competitive player against a beginner.
+model SkillRatingHistory {
+  id String @id @default(cuid())
+
+  userId String
+  sport  SportType
+
+  /// Glicko-2 state.
+  mu    Decimal @db.Decimal(6, 2)
+  phi   Decimal @db.Decimal(6, 2)
+  sigma Decimal @db.Decimal(6, 4)
+
+  matchesPlayed Int      @default(0)
+  computedAt    DateTime @default(now())
+
+  @@index([userId, sport, computedAt])
+  @@map("skill_rating_history")
+}

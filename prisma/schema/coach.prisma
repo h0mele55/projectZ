@@ -1,0 +1,116 @@
+model Coach {
+  id       String @id @default(cuid())
+  tenantId String
+  userId   String
+
+  /// Encrypted at rest + sanitised.
+  bio                String?
+  hourlyRateCents    Int
+  currency           String       @default("EUR")
+  sports             SportType[]
+  certificationsJson Json         @default("[]")
+  verified           Boolean      @default(false)
+  status             TenantStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  coachSports  CoachSport[]
+  availability CoachAvailability[]
+  bookings     CoachBooking[]
+  reviews      CoachReview[]
+
+  @@unique([tenantId, userId])
+  @@index([tenantId, status])
+  @@index([userId])
+  @@map("coach")
+}
+
+model CoachSport {
+  id       String @id @default(cuid())
+  tenantId String
+  coachId  String
+
+  sport      SportType
+  skillLevel SkillLevel @default(INTERMEDIATE)
+
+  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, sport])
+  @@index([tenantId])
+  @@index([coachId])
+  @@map("coach_sport")
+}
+
+model CoachAvailability {
+  id       String @id @default(cuid())
+  tenantId String
+  coachId  String
+
+  dayOfWeek Int
+  openTime  DateTime @db.Time(0)
+  closeTime DateTime @db.Time(0)
+
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  exceptionDate DateTime? @db.Date
+
+  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@index([coachId, dayOfWeek])
+  @@index([tenantId])
+  @@map("coach_availability")
+}
+
+/// Same double-booking problem as Booking, same solution: an EXCLUDE
+/// constraint on (coachId, time range). A coach cannot be in two places.
+model CoachBooking {
+  id       String  @id @default(cuid())
+  tenantId String
+  coachId  String
+  courtId  String?
+
+  playerUserId String
+
+  startTs DateTime @db.Timestamptz(3)
+  endTs   DateTime @db.Timestamptz(3)
+
+  status     BookingStatus @default(PENDING)
+  totalCents Int
+  currency   String        @default("EUR")
+  paymentId  String?
+  /// Encrypted at rest + sanitised.
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  coach Coach  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  court Court? @relation(fields: [courtId], references: [id])
+
+  @@index([tenantId, coachId, startTs])
+  @@index([tenantId, status])
+  @@index([courtId])
+  @@index([playerUserId])
+  @@map("coach_booking")
+}
+
+model CoachReview {
+  id       String @id @default(cuid())
+  tenantId String
+  coachId  String
+
+  authorUserId String
+  rating       Int
+  body         String?
+
+  createdAt DateTime @default(now())
+
+  coach Coach @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, authorUserId])
+  @@index([tenantId])
+  @@index([coachId, createdAt])
+  @@index([authorUserId])
+  @@map("coach_review")
+}
