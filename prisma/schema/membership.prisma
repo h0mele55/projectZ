@@ -1,15 +1,20 @@
-/// The player's standing AT a venue. Tenant-scoped on purpose — credit and
-/// no-show count are the club's business, not the player's global identity.
+/// The player's standing AT a venue. Tenant-scoped on purpose — no-show count
+/// is the club's business, not the player's global identity.
+///
+/// Credit does NOT live here. It lives in [CreditLedgerEntry], which is
+/// append-only. A mutable `creditBalanceCents` column on this model was
+/// removed in P16: a balance you can UPDATE cannot be reconstructed or
+/// disputed, and two wallets in one codebase means someone eventually reads
+/// the wrong one.
 model PlayerVenueRelationship {
   id       String @id @default(cuid())
   tenantId String
 
   playerUserId String
 
-  creditBalanceCents Int       @default(0)
-  tags               String[]
-  noShowCount        Int       @default(0)
-  lastPlayedAt       DateTime?
+  tags         String[]
+  noShowCount  Int       @default(0)
+  lastPlayedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -32,6 +37,11 @@ model Membership {
   endsAt       DateTime
   autoRenew    Boolean          @default(false)
   status       MembershipStatus @default(ACTIVE)
+
+  /// Set when the membership is billed through Stripe Billing rather than sold
+  /// as a one-off. Unique: two memberships pointing at one subscription would
+  /// both flip to ACTIVE on a single `invoice.paid`.
+  stripeSubscriptionId String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -63,42 +73,4 @@ model SeasonPass {
   @@index([playerUserId])
   @@index([validUntil])
   @@map("season_pass")
-}
-
-model CreditBalance {
-  id       String @id @default(cuid())
-  tenantId String
-
-  playerUserId String
-  balanceCents Int    @default(0)
-  currency     String @default("EUR")
-
-  updatedAt DateTime @updatedAt
-
-  transactions CreditTransaction[]
-
-  @@unique([tenantId, playerUserId])
-  @@index([tenantId])
-  @@index([playerUserId])
-  @@map("credit_balance")
-}
-
-model CreditTransaction {
-  id       String @id @default(cuid())
-  tenantId String
-
-  balanceId   String
-  /// Signed: negative for a spend, positive for a top-up or refund.
-  amountCents Int
-  reason      String
-  bookingId   String?
-
-  createdAt DateTime @default(now())
-
-  balance CreditBalance @relation(fields: [balanceId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@index([balanceId, createdAt])
-  @@index([bookingId])
-  @@map("credit_transaction")
 }

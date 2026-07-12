@@ -12,6 +12,10 @@ enum MembershipStatus {
   INVITED
   ACTIVE
   SUSPENDED
+  /// The subscription lapsed (a failed renewal, a cancellation). Distinct from
+  /// SUSPENDED, which is a deliberate act by the club — a member whose card
+  /// expired must not be shown the same message as one who was suspended.
+  EXPIRED
 }
 
 enum TenantStatus {

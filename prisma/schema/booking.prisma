@@ -44,13 +44,14 @@ model Booking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  resource     Resource             @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-  participants BookingParticipant[]
-  payments     Payment[]
-  refunds      Refund[]
-  checkIns     CheckIn[]
-  cancellation Cancellation?
-  session      OpenPlaySession?     @relation("SessionBooking")
+  resource      Resource             @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  participants  BookingParticipant[]
+  payments      Payment[]
+  refunds       Refund[]
+  checkIns      CheckIn[]
+  cancellation  Cancellation?
+  session       OpenPlaySession?     @relation("SessionBooking")
+  bookingSplits BookingSplit[]
 
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId, resourceId, startTs])
