@@ -1,6 +1,4 @@
-// P03 defines only what the test spine needs to prove itself.
-// P04 adds the rest (SportType, CourtSurface, BookingStatus, PaymentStatus,
-// SessionType, SkillLevel, Locale).
+// ── Identity & tenancy ──────────────────────────────────────────────
 
 enum Role {
   OWNER
@@ -14,4 +12,79 @@ enum MembershipStatus {
   INVITED
   ACTIVE
   SUSPENDED
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum PlanTier {
+  FREE
+  CLUB
+  PRO
+}
+
+// ── Sport domain ────────────────────────────────────────────────────
+
+enum SportType {
+  TENNIS
+  PADEL
+  BADMINTON
+  FOOTBALL5
+  BASKETBALL
+  VOLLEYBALL
+  TABLE_TENNIS
+}
+
+enum CourtSurface {
+  CLAY
+  HARD
+  GRASS
+  ARTIFICIAL_GRASS
+  CARPET
+  WOOD
+  CONCRETE
+}
+
+enum SessionType {
+  PRIVATE_BOOKING
+  OPEN_PLAY
+  COACHING
+  TOURNAMENT
+}
+
+enum SkillLevel {
+  BEGINNER
+  IMPROVER
+  INTERMEDIATE
+  ADVANCED
+  COMPETITIVE
+}
+
+// ── Booking & money ─────────────────────────────────────────────────
+// P05 wires these to the Booking / Payment models. Declared here so the
+// whole enum surface lands in one migration rather than dribbling across
+// two.
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  REQUIRES_ACTION
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum Locale {
+  bg
+  en
 }

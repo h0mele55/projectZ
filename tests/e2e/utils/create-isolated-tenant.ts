@@ -41,7 +41,13 @@ export async function createIsolatedTenant(): Promise<IsolatedTenant> {
     await tx.$executeRawUnsafe(`SET LOCAL ROLE app_superuser`);
 
     const tenant = await tx.venueOrg.create({
-      data: { name: `E2E ${slug}`, slug, tenantTestRun: testRun },
+      data: {
+        name: `E2E ${slug}`,
+        slug,
+        contactEmail: `${slug}@playerz.test`,
+        city: 'Sofia',
+        tenantTestRun: testRun,
+      },
     });
     const user = await tx.user.create({ data: { email, name: 'E2E Owner' } });
     await tx.tenantMembership.create({
