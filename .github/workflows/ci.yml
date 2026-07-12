@@ -27,6 +27,9 @@ env:
   NEXTAUTH_URL: 'http://localhost:3000'
   MEILISEARCH_HOST: 'http://localhost:7700'
   MEILISEARCH_MASTER_KEY: 'test-master-key' # pragma: allowlist secret
+  CENTRIFUGO_API_URL: 'http://localhost:8000/api'
+  CENTRIFUGO_API_KEY: 'test-api-key' # pragma: allowlist secret
+  CENTRIFUGO_TOKEN_SECRET: 'test-token-secret' # pragma: allowlist secret
 
 jobs:
   # ═══════════════════════════════════════════════════════════════
@@ -156,6 +159,17 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping" --health-interval 10s
           --health-timeout 5s --health-retries 5
+      centrifugo:
+        image: centrifugo/centrifugo:v6
+        env:
+          CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: test-token-secret # pragma: allowlist secret
+          CENTRIFUGO_HTTP_API_KEY: test-api-key # pragma: allowlist secret
+          CENTRIFUGO_ENGINE_TYPE: memory
+          CENTRIFUGO_HEALTH_ENABLED: 'true'
+        ports: ['8000:8000']
+        options: >-
+          --health-cmd "wget -qO- http://127.0.0.1:8000/health || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 10
       meilisearch:
         image: getmeili/meilisearch:v1.11
         env:
@@ -247,6 +261,17 @@ jobs:
       redis:
         image: redis:7
         ports: ['6379:6379']
+      centrifugo:
+        image: centrifugo/centrifugo:v6
+        env:
+          CENTRIFUGO_CLIENT_TOKEN_HMAC_SECRET_KEY: test-token-secret # pragma: allowlist secret
+          CENTRIFUGO_HTTP_API_KEY: test-api-key # pragma: allowlist secret
+          CENTRIFUGO_ENGINE_TYPE: memory
+          CENTRIFUGO_HEALTH_ENABLED: 'true'
+        ports: ['8000:8000']
+        options: >-
+          --health-cmd "wget -qO- http://127.0.0.1:8000/health || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 10
       meilisearch:
         image: getmeili/meilisearch:v1.11
         env:

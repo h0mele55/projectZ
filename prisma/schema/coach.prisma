@@ -65,9 +65,9 @@ model CoachAvailability {
 /// Same double-booking problem as Booking, same solution: an EXCLUDE
 /// constraint on (coachId, time range). A coach cannot be in two places.
 model CoachBooking {
-  id       String  @id @default(cuid())
-  tenantId String
-  coachId  String
+  id         String  @id @default(cuid())
+  tenantId   String
+  coachId    String
   resourceId String?
 
   playerUserId String
@@ -85,7 +85,7 @@ model CoachBooking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  coach Coach  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  coach    Coach     @relation(fields: [coachId], references: [id], onDelete: Cascade)
   resource Resource? @relation(fields: [resourceId], references: [id])
 
   @@index([tenantId, coachId, startTs])

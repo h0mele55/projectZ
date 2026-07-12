@@ -12,9 +12,18 @@ model Venue {
   country     String  @default("BG")
   lat         Decimal @db.Decimal(10, 7)
   lng         Decimal @db.Decimal(10, 7)
-  timezone    String  @default("Europe/Sofia")
-  phone       String?
-  email       String
+
+  /// PostGIS geography, kept in sync with lat/lng by a database trigger.
+  ///
+  /// Declared as `Unsupported` so PRISMA KNOWS IT EXISTS. Without this, the
+  /// next `migrate diff` compares the live database to the schema, sees a
+  /// column it cannot model, and generates `DROP COLUMN "geog"` — silently
+  /// deleting the entire geo feature in a migration for something unrelated.
+  /// That is not hypothetical: the P15 messaging migration did exactly that.
+  geog     Unsupported("geography(Point, 4326)")?
+  timezone String                                 @default("Europe/Sofia")
+  phone    String?
+  email    String
 
   openingHoursJson Json     @default("{}")
   amenityIds       String[]
@@ -84,7 +93,7 @@ model Resource {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  venue         Venue               @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  venue         Venue                  @relation(fields: [venueId], references: [id], onDelete: Cascade)
   availability  ResourceAvailability[]
   pricingRules  PricingRule[]
   bookings      Booking[]

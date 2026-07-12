@@ -35,6 +35,27 @@ const GLOBAL_MODELS = new Set([
   'sessionParticipant',
   'venueOrg', // keyed on its own id, not a tenantId column
   'tenantMembership', // the membership IS the tenant link
+
+  // ── P15 messaging ──────────────────────────────────────────────────
+  //
+  // `userBlock` is GLOBAL by design. If a block were tenant-scoped, someone
+  // you blocked at one venue could message you from another — that is not a
+  // blocking feature, it is a loophole with extra steps.
+  'userBlock',
+  //
+  // `conversation.tenantId` is NULLABLE: a DM between two players who met at
+  // different clubs belongs to no tenant. Its RLS policy is asymmetric (the
+  // P04 UserSession shape) — readable when null, never writable into a tenant
+  // that isn't yours.
+  'conversation',
+  //
+  // These two hang off a conversation, which RLS already gates. Their access
+  // control is PARTICIPANT-BASED and enforced in the usecase layer
+  // (assertActiveParticipant), because RLS cannot express "is this user a
+  // participant" without a join that would be a performance disaster on every
+  // message read.
+  'conversationParticipant',
+  'chatMessage',
 ]);
 
 /** Prisma calls that read or mutate rows and therefore need scoping. */
