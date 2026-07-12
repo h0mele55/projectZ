@@ -15,6 +15,26 @@ import { asAppSuperuser } from '../helpers/rls';
 describe('search sync', () => {
   const prisma = prismaTestClient();
 
+  beforeAll(async () => {
+    // The test creates its own indexes rather than depending on a CI step.
+    //
+    // Relying on a separate `search-setup` job step means the suite passes in
+    // one job and fails in another purely because somebody added the step to
+    // the integration job and not the coverage one — which is exactly what
+    // happened. A test that needs a fixture should build it.
+    __resetMeili();
+    for (const def of Object.values(INDEXES)) {
+      await meili().createIndex(def.uid, { primaryKey: def.primaryKey }).catch(() => {});
+      const t = await meili().index(def.uid).updateSettings({
+        searchableAttributes: [...def.searchable],
+        filterableAttributes: [...def.filterable],
+        sortableAttributes: [...def.sortable],
+        typoTolerance: { enabled: true, minWordSizeForTypos: { oneTypo: 4, twoTypos: 8 } },
+      });
+      await meili().index(def.uid).waitForTask(t.taskUid);
+    }
+  }, 60_000);
+
   beforeEach(async () => {
     __resetMeili();
     // Start from empty so a stale doc from a previous test cannot make a
