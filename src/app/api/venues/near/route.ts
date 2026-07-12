@@ -1,0 +1,40 @@
+import { type NextRequest, NextResponse } from 'next/server';
+
+import { InvalidCoordinateError, clampRadiusKm, nearVenues } from '@/app-layer/repositories/geo';
+import { prisma } from '@/lib/db/prisma';
+
+/**
+ * "Venues near me". Public, unauthenticated.
+ *
+ * The radius is capped inside `nearVenues` — not here — so the ceiling holds
+ * for every caller, including a job or an admin page that forgets to clamp.
+ */
+export async function GET(req: NextRequest) {
+  const sp = req.nextUrl.searchParams;
+
+  const lat = Number(sp.get('lat'));
+  const lng = Number(sp.get('lng'));
+  const radiusKm = sp.has('radius') ? Number(sp.get('radius')) : undefined;
+
+  try {
+    const venues = await nearVenues(prisma, {
+      lat,
+      lng,
+      radiusKm,
+      sport: (sp.get('sport') as never) ?? undefined,
+      limit: sp.has('limit') ? Number(sp.get('limit')) : undefined,
+    });
+
+    return NextResponse.json({
+      venues,
+      radiusKm: clampRadiusKm(radiusKm),
+    });
+  } catch (e) {
+    if (e instanceof InvalidCoordinateError) {
+      // 400, with the reason. A PostGIS error about a point outside the
+      // ellipsoid is not something a caller can act on.
+      return NextResponse.json({ error: 'invalid_coordinates', detail: e.message }, { status: 400 });
+    }
+    throw e;
+  }
+}

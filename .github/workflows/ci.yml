@@ -25,6 +25,8 @@ env:
   # Throwaway value so NextAuth can boot in CI. Authenticates nothing.
   NEXTAUTH_SECRET: 'ci-test-secret-not-a-real-key' # pragma: allowlist secret
   NEXTAUTH_URL: 'http://localhost:3000'
+  MEILISEARCH_HOST: 'http://localhost:7700'
+  MEILISEARCH_MASTER_KEY: 'test-master-key' # pragma: allowlist secret
 
 jobs:
   # ═══════════════════════════════════════════════════════════════
@@ -139,7 +141,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:16
+        image: postgis/postgis:16-3.4
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -154,6 +156,16 @@ jobs:
         options: >-
           --health-cmd "redis-cli ping" --health-interval 10s
           --health-timeout 5s --health-retries 5
+      meilisearch:
+        image: getmeili/meilisearch:v1.11
+        env:
+          MEILI_MASTER_KEY: test-master-key # pragma: allowlist secret
+          MEILI_ENV: development
+          MEILI_NO_ANALYTICS: 'true'
+        ports: ['7700:7700']
+        options: >-
+          --health-cmd "wget -qO- http://127.0.0.1:7700/health || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - if: needs.preflight.outputs.has_app == 'true'
@@ -184,6 +196,10 @@ jobs:
           else
             echo "No Prisma schema yet — skipping."
           fi
+      - name: Configure search indexes
+        if: needs.preflight.outputs.has_app == 'true'
+        run: npx tsx scripts/search-setup.ts
+
       - name: 'Run tests: integration'
         if: needs.preflight.outputs.has_app == 'true'
         run: |
@@ -219,7 +235,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:16
+        image: postgis/postgis:16-3.4
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -231,6 +247,16 @@ jobs:
       redis:
         image: redis:7
         ports: ['6379:6379']
+      meilisearch:
+        image: getmeili/meilisearch:v1.11
+        env:
+          MEILI_MASTER_KEY: test-master-key # pragma: allowlist secret
+          MEILI_ENV: development
+          MEILI_NO_ANALYTICS: 'true'
+        ports: ['7700:7700']
+        options: >-
+          --health-cmd "wget -qO- http://127.0.0.1:7700/health || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-node-prisma
@@ -307,7 +333,7 @@ jobs:
     timeout-minutes: 40
     services:
       postgres:
-        image: postgres:16
+        image: postgis/postgis:16-3.4
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
