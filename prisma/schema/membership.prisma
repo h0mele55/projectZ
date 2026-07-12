@@ -1,0 +1,104 @@
+/// The player's standing AT a venue. Tenant-scoped on purpose — credit and
+/// no-show count are the club's business, not the player's global identity.
+model PlayerVenueRelationship {
+  id       String @id @default(cuid())
+  tenantId String
+
+  playerUserId String
+
+  creditBalanceCents Int       @default(0)
+  tags               String[]
+  noShowCount        Int       @default(0)
+  lastPlayedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, playerUserId])
+  @@index([tenantId])
+  @@index([playerUserId])
+  @@map("player_venue_relationship")
+}
+
+model Membership {
+  id       String @id @default(cuid())
+  tenantId String
+
+  playerUserId String
+  level        String
+  priceCents   Int
+  currency     String           @default("EUR")
+  startsAt     DateTime
+  endsAt       DateTime
+  autoRenew    Boolean          @default(false)
+  status       MembershipStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, playerUserId, level])
+  @@index([tenantId, status])
+  @@index([playerUserId])
+  @@index([endsAt])
+  @@map("membership")
+}
+
+model SeasonPass {
+  id       String @id @default(cuid())
+  tenantId String
+
+  playerUserId  String
+  name          String
+  totalSessions Int
+  usedSessions  Int      @default(0)
+  priceCents    Int
+  currency      String   @default("EUR")
+  validFrom     DateTime
+  validUntil    DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([playerUserId])
+  @@index([validUntil])
+  @@map("season_pass")
+}
+
+model CreditBalance {
+  id       String @id @default(cuid())
+  tenantId String
+
+  playerUserId String
+  balanceCents Int    @default(0)
+  currency     String @default("EUR")
+
+  updatedAt DateTime @updatedAt
+
+  transactions CreditTransaction[]
+
+  @@unique([tenantId, playerUserId])
+  @@index([tenantId])
+  @@index([playerUserId])
+  @@map("credit_balance")
+}
+
+model CreditTransaction {
+  id       String @id @default(cuid())
+  tenantId String
+
+  balanceId   String
+  /// Signed: negative for a spend, positive for a top-up or refund.
+  amountCents Int
+  reason      String
+  bookingId   String?
+
+  createdAt DateTime @default(now())
+
+  balance CreditBalance @relation(fields: [balanceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([balanceId, createdAt])
+  @@index([bookingId])
+  @@map("credit_transaction")
+}

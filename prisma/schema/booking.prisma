@@ -1,0 +1,173 @@
+/// The core of the product.
+///
+/// Double-booking is prevented by a Postgres EXCLUDE constraint (see the
+/// `booking_exclusion` migration), NOT by an application-layer "is this
+/// slot free?" check. Under concurrency a read-then-write check always
+/// loses: two requests both read "free", both write, both succeed. The
+/// constraint is the only thing that holds.
+model Booking {
+  id       String @id @default(cuid())
+  tenantId String
+  courtId  String
+
+  startTs DateTime @db.Timestamptz(3)
+  endTs   DateTime @db.Timestamptz(3)
+
+  /// Either a registered player…
+  bookedByUserId String?
+  /// …or a guest. A guest booking is a first-class flow, not a degraded one.
+  guestEmail     String?
+  guestPhone     String?
+  guestName      String?
+
+  status     BookingStatus @default(PENDING)
+  totalCents Int
+  currency   String        @default("EUR")
+  /// Encrypted at rest + sanitised.
+  notes      String?
+
+  /// Client-generated. A retried request with the same key returns the
+  /// ORIGINAL booking rather than creating a second one — the difference
+  /// between a flaky network and a double charge.
+  idempotencyKey String
+
+  stripePaymentIntentId String?
+
+  /// A PENDING booking holds the slot. Without an expiry, an abandoned
+  /// checkout would hold it forever, because the EXCLUDE constraint counts
+  /// PENDING as occupying the slot.
+  expiresAt DateTime? @db.Timestamptz(3)
+
+  cancelledAt            DateTime?
+  cancellationReasonJson Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  court        Court                @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  participants BookingParticipant[]
+  payments     Payment[]
+  refunds      Refund[]
+  checkIns     CheckIn[]
+  cancellation Cancellation?
+  session      OpenPlaySession?     @relation("SessionBooking")
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, courtId, startTs])
+  @@index([tenantId, status])
+  @@index([bookedByUserId])
+  @@index([courtId])
+  @@index([expiresAt])
+  @@map("booking")
+}
+
+model BookingParticipant {
+  id        String @id @default(cuid())
+  tenantId  String
+  bookingId String
+
+  userId     String?
+  guestName  String?
+  guestEmail String?
+  /// 1..court.capacity
+  position   Int
+
+  joinedAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, position])
+  @@index([tenantId])
+  @@index([bookingId])
+  @@index([userId])
+  @@map("booking_participant")
+}
+
+model Payment {
+  id        String @id @default(cuid())
+  tenantId  String
+  bookingId String
+
+  provider      String        @default("STRIPE")
+  providerRefId String?
+  amountCents   Int
+  currency      String        @default("EUR")
+  status        PaymentStatus @default(REQUIRES_ACTION)
+
+  paidAt            DateTime?
+  failureReasonJson Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  booking Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  refunds Refund[]
+
+  @@index([tenantId])
+  @@index([bookingId])
+  @@index([providerRefId])
+  @@index([tenantId, status])
+  @@map("payment")
+}
+
+model Refund {
+  id        String  @id @default(cuid())
+  tenantId  String
+  bookingId String
+  paymentId String?
+
+  amountCents   Int
+  currency      String        @default("EUR")
+  reason        String?
+  providerRefId String?
+  status        PaymentStatus @default(REQUIRES_ACTION)
+
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  booking Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id])
+
+  @@index([tenantId])
+  @@index([bookingId])
+  @@index([paymentId])
+  @@map("refund")
+}
+
+model CheckIn {
+  id        String @id @default(cuid())
+  tenantId  String
+  bookingId String
+
+  userId      String?
+  checkedInAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([bookingId])
+  @@index([userId])
+  @@map("check_in")
+}
+
+model Cancellation {
+  id        String @id @default(cuid())
+  tenantId  String
+  bookingId String @unique
+
+  cancelledByUserId String?
+  reason            String?
+  /// Percentage actually refunded, resolved from the venue's policy at the
+  /// moment of cancellation — the policy may change later, and a receipt
+  /// must not.
+  refundPercent     Int     @default(0)
+  refundAmountCents Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([cancelledByUserId])
+  @@map("cancellation")
+}

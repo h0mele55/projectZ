@@ -1,0 +1,188 @@
+model Venue {
+  id       String @id @default(cuid())
+  tenantId String
+
+  slug        String
+  name        String
+  /// Encrypted at rest + HTML-sanitised on write.
+  description String?
+
+  addressLine String
+  city        String
+  country     String  @default("BG")
+  lat         Decimal @db.Decimal(10, 7)
+  lng         Decimal @db.Decimal(10, 7)
+  timezone    String  @default("Europe/Sofia")
+  phone       String?
+  email       String
+
+  openingHoursJson Json     @default("{}")
+  amenityIds       String[]
+  coverPhotoUrl    String?
+
+  /// Drives the refund calculation on cancellation. Stored per venue so a
+  /// club can set its own terms without a code change.
+  cancellationPolicyJson Json @default("{\"fullRefundBeforeHours\":24,\"halfRefundBeforeHours\":12}")
+
+  status      TenantStatus @default(ACTIVE)
+  /// Denormalised from Review. Recomputed on write — a venue list renders
+  /// hundreds of cards, and an AVG() per card is a guaranteed N+1.
+  avgRating   Decimal      @default(0) @db.Decimal(2, 1)
+  reviewCount Int          @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  courts    Court[]
+  amenities VenueAmenity[]
+  photos    VenuePhoto[]
+  reviews   Review[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, slug])
+  @@index([city, country])
+  @@index([tenantId, status])
+  @@index([city, country, status])
+  @@map("venue")
+}
+
+model Court {
+  id       String @id @default(cuid())
+  tenantId String
+  venueId  String
+
+  name     String
+  sport    SportType
+  surface  CourtSurface
+  isIndoor Boolean      @default(false)
+  capacity Int          @default(4)
+  status   TenantStatus @default(ACTIVE)
+
+  basePriceCents Int
+  currency       String @default("EUR")
+
+  minBookingMinutes Int @default(60)
+  maxBookingMinutes Int @default(180)
+  slotStepMinutes   Int @default(30)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  venue         Venue               @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  availability  CourtAvailability[]
+  pricingRules  PricingRule[]
+  bookings      Booking[]
+  sessions      OpenPlaySession[]
+  coachBookings CoachBooking[]
+
+  @@index([tenantId, venueId, sport])
+  @@index([tenantId, status])
+  @@index([tenantId, venueId, sport, status])
+  @@index([venueId])
+  @@map("court")
+}
+
+model CourtAvailability {
+  id       String @id @default(cuid())
+  tenantId String
+  courtId  String
+
+  /// 0 = Sunday … 6 = Saturday.
+  dayOfWeek Int
+  openTime  DateTime @db.Time(0)
+  closeTime DateTime @db.Time(0)
+
+  effectiveFrom DateTime?
+  effectiveTo   DateTime?
+  /// A one-off override for a single date (holiday, maintenance).
+  exceptionDate DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+
+  court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  @@index([courtId, dayOfWeek])
+  @@index([tenantId])
+  @@map("court_availability")
+}
+
+model PricingRule {
+  id       String @id @default(cuid())
+  tenantId String
+  courtId  String
+
+  name     String
+  /// Higher wins. The engine sorts descending and takes the first match.
+  priority Int    @default(100)
+
+  /// { dayOfWeek?: number[], timeRange?: {from,to}, playerTags?: string[],
+  ///   membershipLevel?: string }
+  conditionsJson Json @default("{}")
+
+  multiplier      Decimal? @db.Decimal(4, 2)
+  fixedPriceCents Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, courtId, priority])
+  @@map("pricing_rule")
+}
+
+model VenueAmenity {
+  id       String @id @default(cuid())
+  tenantId String
+  venueId  String
+
+  code  String
+  label String
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, code])
+  @@index([tenantId])
+  @@index([venueId])
+  @@map("venue_amenity")
+}
+
+model VenuePhoto {
+  id       String @id @default(cuid())
+  tenantId String
+  venueId  String
+
+  url      String
+  alt      String?
+  position Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([venueId, position])
+  @@map("venue_photo")
+}
+
+model Review {
+  id       String @id @default(cuid())
+  tenantId String
+  venueId  String
+
+  authorUserId String
+  rating       Int
+  /// Encrypted at rest + sanitised — free text a stranger will read.
+  body         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, authorUserId])
+  @@index([tenantId])
+  @@index([venueId, createdAt])
+  @@index([authorUserId])
+  @@map("review")
+}
