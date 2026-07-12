@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
@@ -26,10 +28,31 @@ async function record(request: Request) {
   return body;
 }
 
-/** Configurable HIBP response — number of times a password was pwned. */
+/**
+ * Configurable HIBP response.
+ *
+ * The real range API returns `SUFFIX:COUNT` lines and the caller scans for
+ * ITS OWN sha1 suffix. So a handler that returns an arbitrary suffix never
+ * matches — the test would silently assert "not breached" no matter what.
+ * `setHibpPwned` therefore takes the actual password and computes the
+ * suffix the caller will look for.
+ */
+let hibpPwnedSuffix: string | null = null;
 let hibpPwnedCount = 0;
-export function setHibpPwnedCount(n: number) {
-  hibpPwnedCount = n;
+
+export function setHibpPwned(password: string, count: number) {
+  hibpPwnedSuffix = createHash('sha1')
+    .update(password, 'utf8')
+    .digest('hex')
+    .toUpperCase()
+    .slice(5);
+  hibpPwnedCount = count;
+}
+
+/** No password is breached. */
+export function setHibpClean() {
+  hibpPwnedSuffix = null;
+  hibpPwnedCount = 0;
 }
 
 export const handlers = [
@@ -85,10 +108,12 @@ export const handlers = [
 
   // ── HIBP (k-anonymity range API) ──────────────────────────────────
   http.get('https://api.pwnedpasswords.com/range/:prefix', () => {
-    // The real API returns `SUFFIX:COUNT` lines. A caller hashes the
-    // password, sends the first 5 hex chars, and scans for its suffix.
-    const suffix = '0'.repeat(35);
-    return HttpResponse.text(`${suffix}:${hibpPwnedCount}`);
+    // The real API returns `SUFFIX:COUNT` lines, padded with decoys that
+    // carry count 0. Always emit a decoy so the "padding is not a hit"
+    // path is exercised on every call.
+    const lines = [`${'0'.repeat(35)}:0`];
+    if (hibpPwnedSuffix) lines.push(`${hibpPwnedSuffix}:${hibpPwnedCount}`);
+    return HttpResponse.text(lines.join('\r\n'));
   }),
 ];
 
@@ -106,7 +131,7 @@ export function useMswServer() {
   afterEach(() => {
     mswServer.resetHandlers();
     recorded.length = 0;
-    hibpPwnedCount = 0;
+    setHibpClean();
   });
 
   afterAll(() => {

@@ -1,0 +1,111 @@
+import { PrismaAdapter } from '@auth/prisma-adapter';
+import type { NextAuthOptions } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import GoogleProvider from 'next-auth/providers/google';
+
+import { buildMembershipClaims, type MembershipClaim } from '@/lib/auth/jwt-claims';
+import { dummyVerify, verifyPassword } from '@/lib/auth/passwords';
+import { getPermissionsForRole } from '@/lib/permissions';
+import { prisma } from '@/lib/db/prisma';
+import { runAsSuperuser } from '@/lib/db/rls-middleware';
+
+/**
+ * NextAuth v4.
+ *
+ * Sign-in runs as app_superuser: at this point no tenant is selected, so
+ * there is no `app.tenant_id` to bind, and an RLS-scoped query for the User
+ * would return zero rows and look exactly like "wrong password".
+ */
+export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma) as NextAuthOptions['adapter'],
+  session: { strategy: 'jwt' },
+  pages: { signIn: '/login' },
+
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    }),
+
+    CredentialsProvider({
+      name: 'credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+
+      async authorize(credentials) {
+        const email = credentials?.email?.toLowerCase().trim();
+        const password = credentials?.password;
+        if (!email || !password) return null;
+
+        const user = await runAsSuperuser((db) => db.user.findUnique({ where: { email } }));
+
+        // EVERY failure path burns the same bcrypt time. Returning early on
+        // "user not found" (~1ms) versus a real compare (~100ms) is a
+        // user-enumeration oracle — an attacker learns which emails have
+        // accounts purely from response timing, with no error message
+        // needed. See lib/auth/passwords.ts.
+        if (!user?.passwordHash) {
+          await dummyVerify(password);
+          return null;
+        }
+
+        const ok = await verifyPassword(password, user.passwordHash);
+        if (!ok) return null;
+
+        return { id: user.id, email: user.email, name: user.name ?? undefined };
+      },
+    }),
+  ],
+
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user?.id) {
+        const rows = await runAsSuperuser((db) =>
+          db.tenantMembership.findMany({
+            where: { userId: user.id, status: 'ACTIVE' },
+            include: { tenant: { select: { id: true, slug: true } } },
+            orderBy: { createdAt: 'asc' },
+          }),
+        );
+
+        const all: MembershipClaim[] = rows.map((m) => ({
+          tenantId: m.tenant.id,
+          tenantSlug: m.tenant.slug,
+          role: m.role,
+        }));
+
+        const { memberships, membershipsTruncated } = buildMembershipClaims(all);
+
+        token.sub = user.id;
+        token.memberships = memberships;
+        token.membershipsTruncated = membershipsTruncated;
+
+        // Default to the first membership; the tenant switcher re-mints.
+        const first = memberships[0];
+        token.tenantId = first?.tenantId ?? null;
+        token.tenantSlug = first?.tenantSlug ?? null;
+        token.role = first?.role ?? null;
+        token.permissions = first ? [...getPermissionsForRole(first.role as never)] : [];
+      }
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      // Mirror the JWT onto the session so a client component sees the same
+      // claims the middleware enforced. A session that disagrees with the
+      // token is how a UI shows an admin button the API then refuses.
+      return Object.assign(session, {
+        userId: token.sub,
+        tenantId: token.tenantId,
+        tenantSlug: token.tenantSlug,
+        role: token.role,
+        permissions: token.permissions,
+        memberships: token.memberships,
+        membershipsTruncated: token.membershipsTruncated,
+      });
+    },
+  },
+};
