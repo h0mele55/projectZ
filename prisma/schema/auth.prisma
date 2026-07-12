@@ -1,62 +1,271 @@
-// ── Hybrid tenancy ──────────────────────────────────────────────────
+// ── The hybrid tenancy shape — this is the load-bearing decision ─────
 //
-// A player is GLOBAL: one User, one identity, one rating — they play at
-// many venues. A venue's staff relationship is PER-TENANT. So User has no
-// tenantId; TenantMembership carries it.
+// A PLAYER is global. One User, one identity, one Glicko-2 rating, playing
+// at many venues. If User carried a tenantId, a player joining a second
+// club would need a second account and their rating would fork.
 //
-// Every tenant-scoped table therefore has a `tenantId` and an RLS policy
-// keyed on `current_setting('app.tenant_id')`. See the migration.
+// A STAFF relationship is per-tenant. TenantMembership carries the
+// tenantId, so the same human can be a COACH at one venue and a PLAYER at
+// another.
 //
-// P03 lands the minimum the test harness must prove itself against.
-// P04 expands this (PlayerProfile, UserSession, PasswordResetToken,
-// Invite, TenantSecuritySettings, TenantCustomRole, ApiKey).
+// Consequence: `User` and `PlayerProfile` have NO RLS — they are global by
+// design. Every OTHER table with a tenantId gets a policy. The
+// `rls-coverage` guardrail enforces exactly that, with those two models on
+// an explicit allowlist, so "forgot to add a policy" cannot pass review.
 
 model VenueOrg {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
+  id   String @id @default(cuid())
+  slug String @unique
+  name String
+
+  logoUrl      String?
+  contactEmail String
+  contactPhone String?
+  addressLine  String?
+  city         String?
+  country      String  @default("BG")
+  timezone     String  @default("Europe/Sofia")
+  currency     String  @default("EUR")
+
+  status   TenantStatus @default(ACTIVE)
+  planTier PlanTier     @default(FREE)
+
+  // Envelope encryption: the tenant's data-encryption key, itself
+  // encrypted with the master key. `previousEncryptedDek` exists so a key
+  // rotation can decrypt in-flight rows written under the old DEK.
+  encryptedDek         String?
+  previousEncryptedDek String?
+
+  stripeAccountId String?
+
+  // E2E cleanup marker — an isolated-tenant fixture stamps its run id here
+  // so teardown is unambiguous even when a spec crashes mid-way.
+  tenantTestRun String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // E2E cleanup marker — an isolated-tenant fixture stamps its run id here
-  // so teardown is unambiguous even if a spec crashes mid-way.
-  tenantTestRun String?
+  memberships      TenantMembership[]
+  sessions         UserSession[]
+  invites          Invite[]
+  customRoles      TenantCustomRole[]
+  apiKeys          ApiKey[]
+  securitySettings TenantSecuritySettings?
 
-  memberships TenantMembership[]
-
+  @@index([city, country, status])
   @@index([tenantTestRun])
   @@map("venue_org")
 }
 
-// Global identity. No tenantId — deliberately.
+/// GLOBAL identity. No tenantId — deliberately. See the header note.
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String?
-  passwordHash String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  emailVerified DateTime?
+  name          String?
+  phone         String?
+  avatarUrl     String?
+  locale        Locale    @default(bg)
 
+  /// Bumped to invalidate every issued session (password change, forced
+  /// logout). A JWT carrying a stale version is rejected.
+  sessionVersion Int @default(0)
+
+  /// Encrypted at rest — never a plaintext TOTP seed.
+  mfaSecret String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile     PlayerProfile?
   memberships TenantMembership[]
+  sessions    UserSession[]
+  resetTokens PasswordResetToken[]
+  invitesSent Invite[]             @relation("InvitedBy")
+  apiKeys     ApiKey[]
+  invitedBy   TenantMembership[]   @relation("MembershipInvitedBy")
 
   @@map("app_user")
 }
 
+/// GLOBAL, 1:1 with User. A player's rating follows the player, not the club.
+model PlayerProfile {
+  userId String @id
+
+  displayName String
+  /// Sports this player actually plays — drives matchmaking eligibility.
+  sports      SportType[]
+
+  /// Per-sport Glicko-2 state: { TENNIS: { mu, phi, sigma, matchesPlayed } }.
+  /// Json rather than a table because it is read as a unit, written as a
+  /// unit, and never queried across players by a single sport's mu.
+  skillRatingsJson Json @default("{}")
+
+  /// Encrypted at rest and HTML-sanitised on write — free text a stranger
+  /// will read is both a PII surface and an XSS surface.
+  bio           String?
+  dateOfBirth   DateTime?
+  preferredHand String?
+  skillLevel    SkillLevel @default(BEGINNER)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("player_profile")
+}
+
 model TenantMembership {
-  id       String           @id @default(cuid())
-  tenantId String
+  id       String @id @default(cuid())
   userId   String
-  role     Role             @default(PLAYER)
-  status   MembershipStatus @default(INVITED)
+  tenantId String
+
+  role         Role             @default(PLAYER)
+  customRoleId String?
+  status       MembershipStatus @default(INVITED)
+
+  invitedById   String?
+  acceptedAt    DateTime?
+  deactivatedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     VenueOrg          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customRole TenantCustomRole? @relation(fields: [customRoleId], references: [id])
+  invitedBy  User?             @relation("MembershipInvitedBy", fields: [invitedById], references: [id])
+
+  @@unique([userId, tenantId])
+  @@index([tenantId, status])
+  @@index([userId])
+  @@index([customRoleId])
+  @@index([invitedById])
+  @@map("tenant_membership")
+}
+
+/// tenantId is NULLABLE — a session exists between sign-in and tenant
+/// selection. That makes its RLS policy asymmetric: you may READ your own
+/// pre-tenant session (tenantId IS NULL), but you may never WRITE a row
+/// into another tenant.
+model UserSession {
+  id       String  @id @default(cuid())
+  userId   String
+  tenantId String?
+
+  tokenHash      String    @unique
+  sessionVersion Int       @default(0)
+  ipAddress      String?
+  userAgent      String?
+  lastSeenAt     DateTime  @default(now())
+  expiresAt      DateTime
+  revokedAt      DateTime?
+
+  createdAt DateTime @default(now())
+
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant VenueOrg? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("user_session")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_token")
+}
+
+model Invite {
+  id       String @id @default(cuid())
+  tenantId String
+
+  email        String
+  role         Role    @default(PLAYER)
+  customRoleId String?
+  tokenHash    String  @unique
+
+  invitedById String?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant    VenueOrg @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy User?    @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@index([invitedById])
+  @@map("invite")
+}
+
+model TenantSecuritySettings {
+  id       String @id @default(cuid())
+  tenantId String @unique
+
+  maxConcurrentSessions Int @default(5)
+  sessionMaxAgeMinutes  Int @default(43200)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   tenant VenueOrg @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, userId])
-  @@index([tenantId, status])
-  @@index([userId])
-  @@map("tenant_membership")
+  @@index([tenantId])
+  @@map("tenant_security_settings")
+}
+
+model TenantCustomRole {
+  id       String @id @default(cuid())
+  tenantId String
+
+  name        String
+  permissions Json   @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      VenueOrg           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships TenantMembership[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("tenant_custom_role")
+}
+
+model ApiKey {
+  id       String @id @default(cuid())
+  tenantId String
+
+  name            String
+  tokenHash       String    @unique
+  createdByUserId String?
+  permissions     Json      @default("[]")
+  lastUsedAt      DateTime?
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  tenant    VenueOrg @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation(fields: [createdByUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([createdByUserId])
+  @@index([expiresAt])
+  @@map("api_key")
 }

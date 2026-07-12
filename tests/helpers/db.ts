@@ -102,7 +102,13 @@ export async function seedTenant(
     await tx.$executeRawUnsafe(`SET LOCAL ROLE app_superuser`);
 
     const tenant = await tx.venueOrg.create({
-      data: { name, slug, tenantTestRun: opts.testRun ?? null },
+      data: {
+        name,
+        slug,
+        contactEmail: `contact-${suffix}@playerz.test`,
+        city: 'Sofia',
+        tenantTestRun: opts.testRun ?? null,
+      },
     });
 
     const user = await tx.user.create({
