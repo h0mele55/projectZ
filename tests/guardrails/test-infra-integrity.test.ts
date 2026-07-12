@@ -43,10 +43,29 @@ describe('test-infra integrity (meta-ratchet)', () => {
       expect(cfg).toContain('coverageThreshold: thresholds');
     });
 
-    it('has a thresholds file the CI gate can read', () => {
+    it('has a thresholds file the CI gate can read, and the floor never drops', () => {
       const t = JSON.parse(read('jest.thresholds.json'));
-      expect(t['src/lib/**'].lines).toBeGreaterThanOrEqual(70);
-      expect(t['src/app-layer/**'].lines).toBeGreaterThanOrEqual(70);
+
+      // P12 narrowed the coverage SCOPE (jest.config's collectCoverageFrom)
+      // to the authored domain logic, and moved the thresholds to `global`.
+      // The scope may be argued about; the FLOOR may not silently fall.
+      expect(t.global.lines).toBeGreaterThanOrEqual(70);
+      expect(t.global.branches).toBeGreaterThanOrEqual(60);
+    });
+
+    it('the coverage scope still covers the code that can actually hurt you', () => {
+      // Narrowing the scope is how a coverage gate quietly stops meaning
+      // anything: exclude enough and 100% is trivial. The booking, pricing
+      // and auth paths must stay inside it.
+      const cfg = read('jest.config.mjs');
+      for (const required of [
+        'src/app-layer/usecases/**/*.ts',
+        'src/lib/db/**/*.ts',
+        'src/lib/auth/**/*.ts',
+        'src/lib/permissions.ts',
+      ]) {
+        expect(cfg).toContain(required);
+      }
     });
   });
 

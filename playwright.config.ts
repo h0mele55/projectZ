@@ -25,6 +25,11 @@ export default defineConfig({
 
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 
+  // The public pages read real venues. Without a seed, `/venues` renders the
+  // empty state and the specs would pass by asserting nothing — the classic
+  // vacuous E2E.
+  globalSetup: './tests/e2e/global-setup.ts',
+
   webServer: {
     // `next start` against a production build — dev-mode HMR overlays and
     // on-demand recompiles make axe runs and screenshots flaky.

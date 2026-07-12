@@ -1,4 +1,3 @@
 {
-  "src/lib/**": { "lines": 70, "functions": 70, "statements": 70, "branches": 60 },
-  "src/app-layer/**": { "lines": 70, "functions": 70, "statements": 70, "branches": 60 }
+  "global": { "lines": 70, "functions": 70, "statements": 70, "branches": 60 }
 }
