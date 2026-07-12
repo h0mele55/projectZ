@@ -46,7 +46,7 @@ jobs:
         image: mailhog/mailhog:latest
         ports: ['1025:1025', '8025:8025']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Bail if not scaffolded
         id: gate
         run: |
@@ -62,7 +62,7 @@ jobs:
       - if: steps.gate.outputs.go == 'true'
         run: npx playwright test --project=${{ matrix.browser }}
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ matrix.browser }}
           path: playwright-report/
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: gate
         run: |
           if [ -n "$(find tests/e2e -name '*-dark.spec.ts' 2>/dev/null)" ]; then
@@ -89,7 +89,7 @@ jobs:
       - if: steps.gate.outputs.go == 'true'
         run: npx playwright test --grep @visual
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: visual-diff
           path: test-results/
@@ -103,7 +103,7 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Trivy filesystem scan (all severities)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -113,7 +113,7 @@ jobs:
           output: trivy-nightly.sarif
           severity: CRITICAL,HIGH,MEDIUM,LOW
           ignore-unfixed: false
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         if: ${{ !cancelled() }}
         with:
           sarif_file: trivy-nightly.sarif
