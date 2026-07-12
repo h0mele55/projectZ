@@ -11,6 +11,7 @@ export function buildRequestContext(overrides: Partial<RequestContext> = {}): Re
   return {
     userId: null,
     tenantId: null,
+    tenantSlug: null,
     role: null,
     permissions: [],
     appPermissions: [],

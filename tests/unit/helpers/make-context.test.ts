@@ -32,13 +32,18 @@ describe('buildRequestContext', () => {
     expect(ctx.locale).toBe('bg');
   });
 
-  it('hasPermission reads both tenant and app permission sets', () => {
+  it('hasPermission checks the TENANT permission set', () => {
     expect(
       hasPermission(buildRequestContext({ permissions: ['bookings.create'] }), 'bookings.create'),
     ).toBe(true);
-    expect(
-      hasPermission(buildRequestContext({ appPermissions: ['platform.admin'] }), 'platform.admin'),
-    ).toBe(true);
     expect(hasPermission(buildRequestContext(), 'bookings.create')).toBe(false);
+  });
+
+  it('permissions are compile-time typed — a typo cannot become a silent deny', () => {
+    // The failure mode of a stringly-typed ACL is a check that ALWAYS
+    // returns false. That reads as "correctly denied" in every test you
+    // would think to write, so the TYPE is the test.
+    // @ts-expect-error — 'bookings.cancle' is not a Permission
+    hasPermission(buildRequestContext(), 'bookings.cancle');
   });
 });
