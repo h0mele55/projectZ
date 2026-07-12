@@ -48,9 +48,9 @@ export default async function VenuesPage({
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((v) => {
-            const sports = [...new Set(v.courts.map((c) => c.sport))];
-            const from = v.courts.length
-              ? Math.min(...v.courts.map((c) => c.basePriceCents))
+            const sports = [...new Set(v.resources.map((c) => c.sport))];
+            const from = v.resources.length
+              ? Math.min(...v.resources.map((c) => c.basePriceCents))
               : null;
 
             return (

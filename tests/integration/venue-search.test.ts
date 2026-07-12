@@ -29,7 +29,7 @@ describe('venue search', () => {
           lng: 23.3,
         },
       });
-      await tx.court.create({
+      await tx.resource.create({
         data: {
           tenantId,
           venueId: v.id,

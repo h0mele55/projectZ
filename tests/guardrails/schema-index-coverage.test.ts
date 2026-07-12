@@ -91,7 +91,7 @@ function parseModels(): Model[] {
         // form as an index reports false misses on `bookingId String @unique`.
         if (/\s@unique\b/.test(line)) model.uniques.push([field]);
 
-        // @relation(fields: [courtId], references: [id])
+        // @relation(fields: [resourceId], references: [id])
         const rel = line.match(/@relation\([^)]*fields:\s*\[([^\]]+)\]/);
         if (rel) {
           model.relations.push({
@@ -126,7 +126,7 @@ describe('schema index coverage', () => {
   it('the parser actually found the schema (a silent no-op would pass everything)', () => {
     expect(models.length).toBeGreaterThanOrEqual(25);
     expect(models.map((m) => m.name)).toEqual(
-      expect.arrayContaining(['Booking', 'Court', 'Venue', 'Payment']),
+      expect.arrayContaining(['Booking', 'Resource', 'Venue', 'Payment']),
     );
   });
 
@@ -176,18 +176,23 @@ describe('schema index coverage', () => {
       why: 'public venue search filters city + country and hides inactive venues',
     },
     {
-      model: 'Court',
+      model: 'Resource',
       index: ['tenantId', 'venueId', 'sport', 'status'],
-      why: 'the court list on a venue page filters by sport',
+      why: 'the resource list on a venue page filters by sport',
+    },
+    {
+      model: 'Resource',
+      index: ['tenantId', 'resourceType'],
+      why: 'P13: filtering a venue to its chess tables / lobbies / routes',
     },
     {
       model: 'Booking',
-      index: ['tenantId', 'courtId', 'startTs'],
+      index: ['tenantId', 'resourceId', 'startTs'],
       why: 'availability lookup — the hottest read in the product',
     },
     {
-      model: 'CourtAvailability',
-      index: ['courtId', 'dayOfWeek'],
+      model: 'ResourceAvailability',
+      index: ['resourceId', 'dayOfWeek'],
       why: 'opening-hours lookup while computing slots',
     },
   ];

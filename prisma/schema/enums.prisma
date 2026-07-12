@@ -29,13 +29,44 @@ enum PlanTier {
 // ── Sport domain ────────────────────────────────────────────────────
 
 enum SportType {
+  // ── Racket ────────────────────────────────────────────────────────
   TENNIS
   PADEL
   BADMINTON
+  TABLE_TENNIS
+  BEACH_TENNIS
+  PICKLEBALL
+
+  // ── Team ball ─────────────────────────────────────────────────────
   FOOTBALL5
+  FOOTBALL
   BASKETBALL
   VOLLEYBALL
-  TABLE_TENNIS
+  BEACH_VOLLEYBALL
+  HANDBALL
+
+  // ── Board ─────────────────────────────────────────────────────────
+  CHESS
+
+  // ── Esport ────────────────────────────────────────────────────────
+  ESPORTS
+
+  // ── Endurance ─────────────────────────────────────────────────────
+  RUNNING
+  CYCLING
+}
+
+/// What kind of thing is actually being reserved.
+///
+/// The MVP called everything a Court, which stopped being true the moment a
+/// chess table, an e-sports lobby and a running route had to be bookable.
+enum ResourceType {
+  COURT
+  FIELD
+  TABLE
+  BOARD_TABLE
+  LOBBY
+  ROUTE
 }
 
 enum CourtSurface {

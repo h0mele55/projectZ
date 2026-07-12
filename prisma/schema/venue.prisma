@@ -33,7 +33,7 @@ model Venue {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  courts    Court[]
+  resources Resource[]
   amenities VenueAmenity[]
   photos    VenuePhoto[]
   reviews   Review[]
@@ -46,17 +46,33 @@ model Venue {
   @@map("venue")
 }
 
-model Court {
+/// Formerly `Court`.
+///
+/// The MVP called everything a court, which stopped being true the moment a
+/// chess table, an e-sports lobby and a running route had to be bookable.
+///
+/// The PHYSICAL TABLE is still `court` (see @@map). Renaming the table AND
+/// rewriting every FK in one migration is how you lose the EXCLUDE constraint
+/// that makes double-booking impossible — so the table rename is a separate,
+/// later migration. This one only renames columns.
+model Resource {
   id       String @id @default(cuid())
   tenantId String
   venueId  String
 
-  name     String
-  sport    SportType
-  surface  CourtSurface
-  isIndoor Boolean      @default(false)
-  capacity Int          @default(4)
-  status   TenantStatus @default(ACTIVE)
+  name         String
+  sport        SportType
+  resourceType ResourceType @default(COURT)
+  surface      CourtSurface
+  isIndoor     Boolean      @default(false)
+  capacity     Int          @default(4)
+  status       TenantStatus @default(ACTIVE)
+
+  /// Family-specific shape the relational model should not carry:
+  /// field dimensions, board count, lobby game titles, route GPX ref +
+  /// distance + elevation. Querying across these is not a use case; reading
+  /// them as a unit is.
+  metadataJson Json @default("{}")
 
   basePriceCents Int
   currency       String @default("EUR")
@@ -69,7 +85,7 @@ model Court {
   updatedAt DateTime @updatedAt
 
   venue         Venue               @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  availability  CourtAvailability[]
+  availability  ResourceAvailability[]
   pricingRules  PricingRule[]
   bookings      Booking[]
   sessions      OpenPlaySession[]
@@ -82,10 +98,10 @@ model Court {
   @@map("court")
 }
 
-model CourtAvailability {
-  id       String @id @default(cuid())
-  tenantId String
-  courtId  String
+model ResourceAvailability {
+  id         String @id @default(cuid())
+  tenantId   String
+  resourceId String
 
   /// 0 = Sunday … 6 = Saturday.
   dayOfWeek Int
@@ -99,17 +115,17 @@ model CourtAvailability {
 
   createdAt DateTime @default(now())
 
-  court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 
-  @@index([courtId, dayOfWeek])
+  @@index([resourceId, dayOfWeek])
   @@index([tenantId])
   @@map("court_availability")
 }
 
 model PricingRule {
-  id       String @id @default(cuid())
-  tenantId String
-  courtId  String
+  id         String @id @default(cuid())
+  tenantId   String
+  resourceId String
 
   name     String
   /// Higher wins. The engine sorts descending and takes the first match.
@@ -125,9 +141,9 @@ model PricingRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, courtId, priority])
+  @@index([tenantId, resourceId, priority])
   @@map("pricing_rule")
 }
 

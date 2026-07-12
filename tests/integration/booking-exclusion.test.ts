@@ -47,8 +47,8 @@ describe('booking exclusion constraint', () => {
   const prisma = prismaTestClient();
 
   let t: SeededTenant;
-  let courtA: string;
-  let courtB: string;
+  let resourceA: string;
+  let resourceB: string;
   let venueId: string;
 
   /** Two bookings on the same court, back-to-back or overlapping. */
@@ -57,7 +57,7 @@ describe('booking exclusion constraint', () => {
   async function makeBooking(
     tx: PrismaClient,
     opts: {
-      courtId?: string;
+      resourceId?: string;
       start: Date;
       end: Date;
       status?: 'PENDING' | 'CONFIRMED' | 'CANCELLED';
@@ -67,7 +67,7 @@ describe('booking exclusion constraint', () => {
     return tx.booking.create({
       data: {
         tenantId: t.tenantId,
-        courtId: opts.courtId ?? courtA,
+        resourceId: opts.resourceId ?? resourceA,
         startTs: opts.start,
         endTs: opts.end,
         status: opts.status ?? 'CONFIRMED',
@@ -96,7 +96,7 @@ describe('booking exclusion constraint', () => {
       venueId = venue.id;
 
       const [a, b] = await Promise.all([
-        tx.court.create({
+        tx.resource.create({
           data: {
             tenantId: t.tenantId,
             venueId: venue.id,
@@ -106,7 +106,7 @@ describe('booking exclusion constraint', () => {
             basePriceCents: 2400,
           },
         }),
-        tx.court.create({
+        tx.resource.create({
           data: {
             tenantId: t.tenantId,
             venueId: venue.id,
@@ -117,8 +117,8 @@ describe('booking exclusion constraint', () => {
           },
         }),
       ]);
-      courtA = a.id;
-      courtB = b.id;
+      resourceA = a.id;
+      resourceB = b.id;
     });
   });
 
@@ -147,9 +147,9 @@ describe('booking exclusion constraint', () => {
 
   it('3. the same time on a DIFFERENT court is fine', async () => {
     await asAppSuperuser(prisma, async (tx) => {
-      await makeBooking(tx, { courtId: courtA, start: at(24), end: at(25) });
-      const second = await makeBooking(tx, { courtId: courtB, start: at(24), end: at(25) });
-      expect(second.courtId).toBe(courtB);
+      await makeBooking(tx, { resourceId: resourceA, start: at(24), end: at(25) });
+      const second = await makeBooking(tx, { resourceId: resourceB, start: at(24), end: at(25) });
+      expect(second.resourceId).toBe(resourceB);
     });
   });
 
@@ -237,7 +237,7 @@ describe('booking exclusion constraint', () => {
 
       // The difference between a flaky network and a double charge.
       await expectPgError(
-        makeBooking(tx, { courtId: courtB, start: at(30), end: at(31), key: 'same-key' }),
+        makeBooking(tx, { resourceId: resourceB, start: at(30), end: at(31), key: 'same-key' }),
         '23505',
         'a duplicate idempotency key',
       );

@@ -76,7 +76,7 @@ export class IdempotencyRaceError extends Error {
 }
 
 export interface CreateBookingInput {
-  courtId: string;
+  resourceId: string;
   startTs: Date;
   endTs: Date;
   totalCents: number;
@@ -142,7 +142,7 @@ export async function createBooking(
     const booking = await db.booking.create({
       data: {
         tenantId,
-        courtId: input.courtId,
+        resourceId: input.resourceId,
         startTs: input.startTs,
         endTs: input.endTs,
         status: 'PENDING',
@@ -203,10 +203,10 @@ export async function cancelBooking(
 
   const booking = await db.booking.findFirstOrThrow({
     where: { id: input.bookingId, tenantId },
-    include: { court: { include: { venue: true } } },
+    include: { resource: { include: { venue: true } } },
   });
 
-  const policy = parsePolicy(booking.court.venue.cancellationPolicyJson);
+  const policy = parsePolicy(booking.resource.venue.cancellationPolicyJson);
   const quote = computeRefundAmount({
     bookingTotalCents: booking.totalCents,
     hoursUntilStart: hoursUntil(booking.startTs, now),

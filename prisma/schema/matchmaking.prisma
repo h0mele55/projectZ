@@ -1,10 +1,21 @@
 model OpenPlaySession {
   id       String @id @default(cuid())
   tenantId String
-  courtId  String
+  resourceId String?
 
   hostUserId String
   sport      SportType
+  /// Denormalised from the registry so a family filter is one index hit, not
+  /// a 16-way IN clause rebuilt on every query.
+  sportFamily String @default("RACKET")
+
+  /// RESOURCE  — a court/table/lobby is reserved (the MVP model).
+  /// MEETING_POINT — running and cycling: people agree to meet at a lat/lng.
+  ///   There is nothing to reserve, so resourceId is null.
+  locationMode    String  @default("RESOURCE")
+  meetingPointLat Decimal? @db.Decimal(10, 7)
+  meetingPointLng Decimal? @db.Decimal(10, 7)
+  routeRef        String?
 
   startTs DateTime @db.Timestamptz(3)
   endTs   DateTime @db.Timestamptz(3)
@@ -28,14 +39,14 @@ model OpenPlaySession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  court         Court                @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  resource      Resource?            @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   linkedBooking Booking?             @relation("SessionBooking", fields: [linkedBookingId], references: [id])
   participants  SessionParticipant[]
   messages      SessionChatMessage[]
 
   @@index([tenantId, sport, startTs])
   @@index([tenantId, status])
-  @@index([courtId])
+  @@index([resourceId])
   @@index([hostUserId])
   @@map("open_play_session")
 }

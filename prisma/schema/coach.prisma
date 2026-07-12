@@ -68,7 +68,7 @@ model CoachBooking {
   id       String  @id @default(cuid())
   tenantId String
   coachId  String
-  courtId  String?
+  resourceId String?
 
   playerUserId String
 
@@ -86,11 +86,11 @@ model CoachBooking {
   updatedAt DateTime @updatedAt
 
   coach Coach  @relation(fields: [coachId], references: [id], onDelete: Cascade)
-  court Court? @relation(fields: [courtId], references: [id])
+  resource Resource? @relation(fields: [resourceId], references: [id])
 
   @@index([tenantId, coachId, startTs])
   @@index([tenantId, status])
-  @@index([courtId])
+  @@index([resourceId])
   @@index([playerUserId])
   @@map("coach_booking")
 }
