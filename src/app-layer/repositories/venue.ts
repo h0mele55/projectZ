@@ -71,6 +71,10 @@ export async function listVenues(
       : {}),
   };
 
+  // guardrail-allow: cross-tenant — public venue search is intentionally
+  // unscoped. A player hunting a padel court in Sofia does not know or care
+  // which club owns it. `status: ACTIVE` is the only filter, and an
+  // integration test asserts this did not weaken RLS for anything else.
   const rows = await db.venue.findMany({
     where,
     include: { courts: { where: { status: 'ACTIVE' }, take: 20 } },
