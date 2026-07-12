@@ -1,0 +1,98 @@
+enum ReviewStatus {
+  /// Classified clean, visible to everyone.
+  PUBLISHED
+  /// A human must look before anyone else does.
+  PENDING_REVIEW
+  /// Rejected. Kept, not deleted — see ModerationCase.
+  REJECTED
+}
+
+enum ModerationCaseStatus {
+  OPEN
+  APPROVED
+  REJECTED
+}
+
+enum ModerationSubject {
+  REVIEW
+  CHAT_MESSAGE
+  PROFILE
+}
+
+/// The human review queue — the backstop the classifier is not.
+///
+/// A machine that decides alone is a machine with no appeal. Every item the
+/// classifier is unsure about, every item a user reports, and every item that
+/// arrived while the classifier was down lands here.
+///
+/// Cases are NOT deleted when resolved. "Why was my review taken down?" must
+/// have an answer, and so must "this moderator rejects everything from one
+/// club" — neither is answerable if the record is erased on close.
+model ModerationCase {
+  id       String  @id @default(cuid())
+  tenantId String?
+
+  subjectType ModerationSubject
+  subjectId   String
+
+  status ModerationCaseStatus @default(OPEN)
+
+  /// Why it is here: a classifier category, or `user_report`, or
+  /// `classifier_unavailable`.
+  reason String
+
+  /// The classifier's raw scores, for the human to see what the machine saw.
+  /// Null when a person reported it and no classifier ran.
+  scoresJson Json?
+
+  /// Who reported it, when a human did.
+  reportedByUserId String?
+
+  resolvedByUserId String?
+  resolvedAt       DateTime?
+  resolutionNote   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// "One OPEN case per subject" is a PARTIAL unique index, and Prisma cannot
+  /// model one — so it lives in SQL and is protected by the migration-safety
+  /// ratchet:
+  ///
+  ///   CREATE UNIQUE INDEX moderation_case_one_open_idx
+  ///     ON moderation_case ("subjectType", "subjectId") WHERE status = 'OPEN';
+  ///
+  /// A plain @@unique([subjectType, subjectId, status]) looks equivalent and is
+  /// NOT: it also permits only one RESOLVED case per subject, so the second time
+  /// an item is reported and approved the insert violates it and the moderator
+  /// gets a 500 for doing their job.
+  @@index([status, createdAt])
+  @@index([tenantId, status])
+  @@map("moderation_case")
+}
+
+/// A user reporting content. Distinct from ModerationCase: many reports can
+/// point at one case, and we need to know WHO reported WHAT to spot brigading.
+model ContentReport {
+  id       String  @id @default(cuid())
+  tenantId String?
+
+  subjectType ModerationSubject
+  subjectId   String
+
+  reporterUserId String
+  reason         String
+
+  createdAt DateTime @default(now())
+
+  /// One report per person per item. Without it, one user can file a hundred
+  /// reports and manufacture the appearance of a consensus.
+  @@unique([subjectType, subjectId, reporterUserId])
+  // tenantId LEADS. RLS injects `tenantId = current_setting(...)` into every
+  // query whether the caller wrote it or not; a tenantId sitting second in a
+  // composite cannot serve that predicate.
+  @@index([tenantId])
+  @@index([subjectId])
+  @@index([reporterUserId])
+  @@map("content_report")
+}

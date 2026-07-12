@@ -55,6 +55,23 @@ export function setHibpClean() {
   hibpPwnedCount = 0;
 }
 
+/**
+ * What the moderation classifier says next.
+ *
+ * Set per-test. Reset to clean in afterEach, so a test that forgets to reset
+ * cannot leave a poisoned classifier for the next one.
+ */
+let moderationScores: Record<string, number> = {};
+
+export function setModerationScores(scores: Record<string, number>) {
+  moderationScores = scores;
+}
+
+export function setModerationClean() {
+  moderationScores = { harassment: 0.01, violence: 0.001, 'sexual/minors': 0.0001 };
+}
+setModerationClean();
+
 export const handlers = [
   // ── Stripe ────────────────────────────────────────────────────────
   http.post('https://api.stripe.com/v1/payment_intents', async ({ request }) => {
@@ -147,6 +164,26 @@ export const handlers = [
     });
   }),
 
+  // ── OpenAI moderation ─────────────────────────────────────────────
+  //
+  // Clean by default. A test that wants a flag calls `setModerationScores`.
+  http.post('https://api.openai.com/v1/moderations', async ({ request }) => {
+    await record(request);
+    return HttpResponse.json({
+      id: 'modr-test',
+      model: 'omni-moderation-latest',
+      results: [
+        {
+          flagged: Object.values(moderationScores).some((s) => s >= 0.5),
+          categories: Object.fromEntries(
+            Object.entries(moderationScores).map(([k, v]) => [k, v >= 0.5]),
+          ),
+          category_scores: moderationScores,
+        },
+      ],
+    });
+  }),
+
   // ── Resend ────────────────────────────────────────────────────────
   http.post('https://api.resend.com/emails', async ({ request }) => {
     await record(request);
@@ -179,6 +216,7 @@ export function useMswServer() {
     mswServer.resetHandlers();
     recorded.length = 0;
     setHibpClean();
+    setModerationClean();
   });
 
   afterAll(() => {
