@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
       country: v.country,
       avgRating: Number(v.avgRating),
       reviewCount: v.reviewCount,
-      sports: [...new Set(v.courts.map((c) => c.sport))],
-      fromPriceCents: v.courts.length ? Math.min(...v.courts.map((c) => c.basePriceCents)) : null,
+      sports: [...new Set(v.resources.map((c) => c.sport))],
+      fromPriceCents: v.resources.length ? Math.min(...v.resources.map((c) => c.basePriceCents)) : null,
     })),
     nextCursor: page.nextCursor,
   });

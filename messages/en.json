@@ -180,5 +180,23 @@
       "tests": "Tests",
       "vendors": "Vendors"
     }
+  },
+  "sports": {
+    "TENNIS": "Tennis",
+    "PADEL": "Padel",
+    "BADMINTON": "Badminton",
+    "TABLE_TENNIS": "Table tennis",
+    "BEACH_TENNIS": "Beach tennis",
+    "PICKLEBALL": "Pickleball",
+    "FOOTBALL": "Football",
+    "FOOTBALL5": "Football 5-a-side",
+    "BASKETBALL": "Basketball",
+    "VOLLEYBALL": "Volleyball",
+    "BEACH_VOLLEYBALL": "Beach volleyball",
+    "HANDBALL": "Handball",
+    "CHESS": "Chess",
+    "ESPORTS": "E-sports",
+    "RUNNING": "Running",
+    "CYCLING": "Cycling"
   }
 }

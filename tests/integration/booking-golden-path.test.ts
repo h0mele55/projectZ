@@ -11,7 +11,7 @@ const at = (h: number) => new Date(Date.now() + h * HOUR);
 describe('booking golden path', () => {
   const prisma = prismaTestClient();
   let t: SeededTenant;
-  let courtId: string;
+  let resourceId: string;
 
   beforeEach(async () => {
     t = await seedTenant();
@@ -28,7 +28,7 @@ describe('booking golden path', () => {
           lng: 23.3,
         },
       });
-      const court = await tx.court.create({
+      const court = await tx.resource.create({
         data: {
           tenantId: t.tenantId,
           venueId: venue.id,
@@ -38,13 +38,13 @@ describe('booking golden path', () => {
           basePriceCents: 2400,
         },
       });
-      courtId = court.id;
+      resourceId = court.id;
     });
   });
 
   const mk = (db: PrismaClient, o: Partial<Parameters<typeof createBooking>[2]> = {}) =>
     createBooking(db, t.tenantId, {
-      courtId,
+      resourceId,
       startTs: at(24),
       endTs: at(25),
       totalCents: 2400,

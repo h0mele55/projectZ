@@ -33,7 +33,7 @@ describe('open-play session capacity', () => {
           lng: 23.3,
         },
       });
-      const court = await tx.court.create({
+      const court = await tx.resource.create({
         data: {
           tenantId: t.tenantId,
           venueId: venue.id,
@@ -46,7 +46,7 @@ describe('open-play session capacity', () => {
       const s = await tx.openPlaySession.create({
         data: {
           tenantId: t.tenantId,
-          courtId: court.id,
+          resourceId: court.id,
           hostUserId: t.userId,
           sport: 'PADEL',
           startTs: new Date(Date.now() + 86_400_000),
@@ -155,7 +155,7 @@ describe('session chat', () => {
           lng: 23.3,
         },
       });
-      const court = await tx.court.create({
+      const court = await tx.resource.create({
         data: {
           tenantId: t.tenantId,
           venueId: venue.id,
@@ -168,7 +168,7 @@ describe('session chat', () => {
       const s = await tx.openPlaySession.create({
         data: {
           tenantId: t.tenantId,
-          courtId: court.id,
+          resourceId: court.id,
           hostUserId: t.userId,
           sport: 'PADEL',
           startTs: new Date(Date.now() + 86_400_000),

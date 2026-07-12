@@ -43,7 +43,7 @@ export async function listVenues(
   db: PrismaClient,
   filter: VenueFilter,
   opts: { cursor?: string; limit?: number } = {},
-): Promise<Page<Prisma.VenueGetPayload<{ include: { courts: true } }>>> {
+): Promise<Page<Prisma.VenueGetPayload<{ include: { resources: true } }>>> {
   const take = clampLimit(opts.limit);
 
   const where: Prisma.VenueWhereInput = {
@@ -59,7 +59,7 @@ export async function listVenues(
       : {}),
     ...(filter.sport || filter.indoor !== undefined || filter.maxPriceCents
       ? {
-          courts: {
+          resources: {
             some: {
               status: 'ACTIVE',
               ...(filter.sport ? { sport: filter.sport } : {}),
@@ -77,7 +77,7 @@ export async function listVenues(
   // integration test asserts this did not weaken RLS for anything else.
   const rows = await db.venue.findMany({
     where,
-    include: { courts: { where: { status: 'ACTIVE' }, take: 20 } },
+    include: { resources: { where: { status: 'ACTIVE' }, take: 20 } },
     orderBy: { id: 'asc' },
     // take + 1 so we can tell "there is a next page" WITHOUT a second
     // count(*) query, which on a large table is the expensive half.
@@ -100,7 +100,7 @@ export async function getVenueBySlug(db: PrismaClient, tenantId: string, venueSl
     // here so the query is still correct if it is ever run as superuser.
     where: { tenantId, slug: venueSlug, status: 'ACTIVE' },
     include: {
-      courts: { where: { status: 'ACTIVE' }, orderBy: { name: 'asc' }, take: 50 },
+      resources: { where: { status: 'ACTIVE' }, orderBy: { name: 'asc' }, take: 50 },
       photos: { orderBy: { position: 'asc' }, take: 20 },
       amenities: { take: 30 },
     },

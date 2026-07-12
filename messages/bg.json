@@ -180,5 +180,23 @@
       "tests": "Тестове",
       "vendors": "Доставчици"
     }
+  },
+  "sports": {
+    "TENNIS": "Тенис",
+    "PADEL": "Падел",
+    "BADMINTON": "Бадминтон",
+    "TABLE_TENNIS": "Тенис на маса",
+    "BEACH_TENNIS": "Плажен тенис",
+    "PICKLEBALL": "Пикълбол",
+    "FOOTBALL": "Футбол",
+    "FOOTBALL5": "Футбол 5х5",
+    "BASKETBALL": "Баскетбол",
+    "VOLLEYBALL": "Волейбол",
+    "BEACH_VOLLEYBALL": "Плажен волейбол",
+    "HANDBALL": "Хандбал",
+    "ESPORTS": "Е-спорт",
+    "RUNNING": "Бягане",
+    "CYCLING": "Колоездене",
+    "CHESS": "Шах"
   }
 }

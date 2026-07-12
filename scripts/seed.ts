@@ -135,12 +135,12 @@ async function main() {
       });
 
       for (let i = 1; i <= v.courtCount; i++) {
-        const existing = await tx.court.findFirst({
+        const existing = await tx.resource.findFirst({
           where: { tenantId: org.id, venueId: venue.id, name: `Court ${i}` },
         });
         if (existing) continue;
 
-        const court = await tx.court.create({
+        const court = await tx.resource.create({
           data: {
             tenantId: org.id,
             venueId: venue.id,
@@ -153,10 +153,10 @@ async function main() {
         });
 
         // Open every day, 09:00–22:00.
-        await tx.courtAvailability.createMany({
+        await tx.resourceAvailability.createMany({
           data: Array.from({ length: 7 }, (_, dayOfWeek) => ({
             tenantId: org.id,
-            courtId: court.id,
+            resourceId: court.id,
             dayOfWeek,
             openTime: timeOfDay(OPEN_HOUR),
             closeTime: timeOfDay(CLOSE_HOUR),
@@ -168,7 +168,7 @@ async function main() {
         await tx.pricingRule.create({
           data: {
             tenantId: org.id,
-            courtId: court.id,
+            resourceId: court.id,
             name: 'Weekend peak',
             priority: 200,
             conditionsJson: { dayOfWeek: [0, 6], timeRange: { from: '18:00', to: '22:00' } },
