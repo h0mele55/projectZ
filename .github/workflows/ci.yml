@@ -47,7 +47,7 @@ jobs:
       has_e2e: ${{ steps.detect.outputs.has_e2e }}
       has_docker: ${{ steps.detect.outputs.has_docker }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: detect
         run: |
           if [ -f package.json ] && [ -f package-lock.json ]; then
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -97,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -115,7 +115,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -181,7 +181,7 @@ jobs:
           --health-cmd "wget -qO- http://127.0.0.1:7700/health || exit 1"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -283,7 +283,7 @@ jobs:
           --health-cmd "wget -qO- http://127.0.0.1:7700/health || exit 1"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-prisma
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -334,7 +334,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_app == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -380,7 +380,7 @@ jobs:
         image: mailhog/mailhog:latest
         ports: ['1025:1025', '8025:8025']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - if: needs.preflight.outputs.has_e2e == 'true'
         uses: ./.github/actions/setup-node-prisma
         with:
@@ -417,7 +417,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -467,7 +467,7 @@ jobs:
       matrix:
         language: [javascript-typescript, actions]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # CodeQL hard-fails (exit 32, "no source code seen") when a
       # language's extractor finds nothing to analyse. Before P01 there
@@ -513,7 +513,7 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Trivy filesystem scan (SARIF)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
