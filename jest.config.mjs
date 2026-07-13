@@ -38,6 +38,12 @@ const ESM_PACKAGES = [
   '@formatjs/[^/]+',
   // MSW and its interceptors ship ESM-only.
   'msw',
+  // tournament-organizer is ESM-only, and so is the pairing engine it pulls in.
+  // A nested ESM dep that is not named here stays untransformed and the parser
+  // dies on its first `import` — the failure names the PARENT file, which sends
+  // you looking in the wrong place.
+  'tournament-organizer',
+  'tournament-pairings',
   '@mswjs/[^/]+',
   '@bundled-es-modules/[^/]+',
   'until-async',
@@ -84,6 +90,10 @@ const SWC_TRANSFORM = [
       parser: { syntax: 'typescript', tsx: true },
       transform: { react: { runtime: 'automatic' } },
     },
+    // Emit CommonJS. Jest's runtime is CJS, and a dependency whose package.json
+    // says `"type": "module"` is otherwise left as ESM — which then throws
+    // "Cannot use import statement outside a module" from inside node_modules.
+    module: { type: 'commonjs' },
   },
 ];
 
