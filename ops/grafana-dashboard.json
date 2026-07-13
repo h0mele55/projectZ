@@ -1,0 +1,91 @@
+{
+  "title": "playerz.bg — service health",
+  "uid": "playerz-core",
+  "description": "The numbers that mean something. Panels are ordered by what you look at FIRST during an incident: is money moving, are bookings landing, is the system slow. Everything below the fold is diagnosis, not detection.",
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Payment failures (by reason)",
+      "description": "This is the first panel because it is the first thing that matters. 'card_declined' is the customer's problem; 'payouts_not_enabled' is ours. They are split BECAUSE averaging them into one line would hide our bug behind their declines.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(playerz_payment_failures_total[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Pending payout (unsettled money owed to venues)",
+      "description": "A gauge that only ever goes up is a gauge telling you transfers are silently failing and clubs are not being paid. That is normally discovered by an angry phone call.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "playerz_pending_payout_cents / 100", "legendFormat": "EUR owed" }]
+    },
+    {
+      "id": 3,
+      "title": "Bookings created",
+      "description": "The business, in one line.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (sport) (rate(playerz_bookings_created_total[5m]))",
+          "legendFormat": "{{sport}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Double-bookings rejected",
+      "description": "THIS IS NOT AN ERROR PANEL. A rejection is the EXCLUDE constraint doing its job — two people raced for one court and Postgres refused the loser. A steady trickle is healthy. A sudden spike means a popular slot, a client retrying in a loop, or a bug hammering us — and it is one of the few numbers that tells you something is wrong BEFORE a user does. Do not alert on the count; alert on the slope.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (sport) (rate(playerz_double_bookings_rejected_total[5m]))",
+          "legendFormat": "{{sport}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "HTTP latency (p50 / p95 / p99)",
+      "description": "p95, not the mean. A mean of 200ms is perfectly compatible with one user in twenty waiting four seconds — and that user is the one who leaves.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(playerz_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(playerz_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(playerz_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Oldest job in queue (age, not depth)",
+      "description": "Depth lies. A thousand fast jobs is fine; ten stuck ones is not. If the oldest job in the reminder queue is two hours old, somebody's booking reminder will arrive after their booking.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "playerz_queue_oldest_job_age_seconds",
+          "legendFormat": "{{queue}}"
+        }
+      ]
+    }
+  ]
+}

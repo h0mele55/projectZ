@@ -1,0 +1,98 @@
+# Gatus — external uptime monitoring.
+#
+# ─── Why this runs OUTSIDE our infrastructure ────────────────────────
+#
+# A monitor that lives in the cluster it monitors cannot tell you the cluster is
+# down. It goes down with it, quietly, and the dashboard stays green because
+# nothing is left to turn it red.
+#
+# So Gatus runs somewhere else, and it checks the things a USER would notice —
+# not the things our own metrics would already have told us.
+
+storage:
+  type: sqlite
+  path: /data/gatus.db
+
+alerting:
+  # Wire a webhook / PagerDuty key here. An alert nobody receives is a log line.
+  discord:
+    webhook-url: ${GATUS_WEBHOOK_URL}
+
+endpoints:
+  # ── Liveness: is anything answering at all? ───────────────────────
+  - name: app-liveness
+    group: core
+    url: https://playerz.bg/api/health
+    interval: 30s
+    conditions:
+      - '[STATUS] == 200'
+      - '[RESPONSE_TIME] < 1000'
+    alerts:
+      - type: discord
+        # Two consecutive failures, not one. A single blip on a 30s interval is
+        # usually a network hiccup, and an alerting system that cries wolf is one
+        # people mute — which is worse than having none.
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
+  # ── Readiness: can it actually serve? ─────────────────────────────
+  - name: app-readiness
+    group: core
+    url: https://playerz.bg/api/ready
+    interval: 60s
+    conditions:
+      - '[STATUS] == 200'
+      # The body names WHICH dependency failed. Alerting on the status code alone
+      # tells you "something is wrong"; this tells you what.
+      - '[BODY].status == ready'
+    alerts:
+      - type: discord
+        failure-threshold: 2
+        success-threshold: 2
+        send-on-resolved: true
+
+  # ── The thing the business actually is ────────────────────────────
+  #
+  # A homepage that returns 200 while the booking API is broken is a site that is
+  # "up" and cannot take money. This checks the page a customer starts on.
+  - name: venue-search
+    group: user-journeys
+    url: https://playerz.bg/venues
+    interval: 2m
+    conditions:
+      - '[STATUS] == 200'
+      - '[RESPONSE_TIME] < 3000'
+      # If the page renders but the venue list is empty, search is broken and the
+      # product is useless — while every status code says everything is fine.
+      - '[BODY] == pat(*venue*)'
+    alerts:
+      - type: discord
+        failure-threshold: 3
+        send-on-resolved: true
+
+  # ── TLS, which expires while you are not looking ──────────────────
+  - name: tls-certificate
+    group: core
+    url: https://playerz.bg/
+    interval: 1h
+    conditions:
+      # Ten days is enough warning to renew during working hours rather than at
+      # 3am on the day it dies.
+      - '[CERTIFICATE_EXPIRATION] > 240h'
+    alerts:
+      - type: discord
+        failure-threshold: 1
+        send-on-resolved: true
+
+  # ── Dependencies we do not control ────────────────────────────────
+  #
+  # When Stripe is down, our payments fail and it is NOT our bug. Knowing that
+  # within a minute is the difference between "Stripe is having an incident" and
+  # two hours of debugging our own code.
+  - name: stripe-api
+    group: third-party
+    url: https://status.stripe.com/current
+    interval: 5m
+    conditions:
+      - '[STATUS] == 200'
