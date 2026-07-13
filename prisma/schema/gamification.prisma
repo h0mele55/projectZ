@@ -1,0 +1,88 @@
+enum XpEventType {
+  BOOKING_COMPLETED
+  MATCH_PLAYED
+  REVIEW_PUBLISHED
+  SESSION_HOSTED
+  STREAK_WEEK
+  PROFILE_COMPLETED
+  FIRST_BOOKING
+  ADJUSTMENT
+}
+
+/// Every point ever awarded, and why.
+///
+/// APPEND-ONLY in spirit and in practice: a player's XP total is the SUM of
+/// these rows, never a number we edit. Same reasoning as the credit ledger —
+/// "why am I level 7?" has to be answerable, and a clawback has to be a visible
+/// entry rather than a quiet subtraction.
+model XpEvent {
+  id       String  @id @default(cuid())
+  tenantId String?
+
+  userId String
+  type   XpEventType
+  /// Signed. Negative for a clawback (a refunded booking, a deleted review).
+  points Int
+
+  refType String?
+  refId   String?
+
+  /// THE field that makes this system correct.
+  ///
+  /// Derived from what the event IS — `booking_completed:bk_123` — not from
+  /// when it happened. Awarding XP is triggered by webhooks, cron jobs and user
+  /// actions, all of which retry. Without a unique key, one completed booking
+  /// pays out every time the job re-runs, and the leaderboard becomes a ranking
+  /// of whose events got retried most.
+  dedupeKey String @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([tenantId, userId])
+  @@index([refType, refId])
+  @@map("xp_event")
+}
+
+/// A badge definition. Data, not code — so adding one is a row, not a deploy.
+model Achievement {
+  /// Stable slug: `first_win`, `century_club`.
+  code String @id
+
+  name        String
+  description String
+  icon        String?
+
+  /// XP granted the first time it is unlocked.
+  xpReward Int @default(0)
+
+  /// What triggers it. Interpreted by `evaluateAchievements`.
+  /// { "type": "COUNT", "event": "BOOKING_COMPLETED", "threshold": 100 }
+  ruleJson Json
+
+  hidden Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  unlocks UserAchievement[]
+
+  @@map("achievement")
+}
+
+model UserAchievement {
+  id     String @id @default(cuid())
+  userId String
+
+  achievementCode String
+
+  unlockedAt DateTime @default(now())
+
+  achievement Achievement @relation(fields: [achievementCode], references: [code], onDelete: Cascade)
+
+  /// Unlocked ONCE. Without this, the evaluator re-grants the badge — and its
+  /// XP reward — every time it runs, which turns "play 100 games" into an
+  /// infinite XP tap that pays out on every subsequent booking.
+  @@unique([userId, achievementCode])
+  @@index([userId])
+  @@map("user_achievement")
+}
