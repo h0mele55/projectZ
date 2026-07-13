@@ -1,5 +1,5 @@
 /*
- * Design Token Foundation — Inflect Compliance
+ * Design Token Foundation — playerz.bg
  *
  * Semantic CSS custom properties that all components target instead of
  * raw Tailwind color utilities. The Tailwind config maps these tokens
@@ -14,7 +14,12 @@
  *     the light counterpart here; the light-mode parity guardrail at
  *     `tests/guardrails/light-mode-parity.test.ts` enforces this.
  *
- * Palette origin: Tailwind Slate + Indigo (brand).
+ * Palette: playerz green (#22C55E) on near-black; warm off-white in light mode.
+ *
+ * CONTRAST IS MEASURED, NOT CLAIMED. Every pairing this product actually renders
+ * is computed from these values by tests/guardrails/contrast.test.ts, in BOTH
+ * themes. The `(AA, 9.0:1)` notes below are now checked rather than trusted — if
+ * you nudge a hex, the build tells you what it broke.
  */
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -56,8 +61,19 @@
   --content-inverted: #04120a; /* near-black — text on green/inverted surfaces (6.5:1 on brand-emphasis) */
 
   /* ── Borders / Dividers ────────────────────────────────────────── */
-  --border-default: #2e332c; /* standard borders */
+  --border-default: #2e332c; /* DECORATIVE dividers and card edges only — see below */
   --border-subtle: rgba(255, 255, 255, 0.1); /* soft dividers, card edges */
+  /*
+   * INTERACTIVE control boundaries: inputs, checkboxes, radios, selects.
+   *
+   * WCAG 1.4.11 requires 3:1 for the visual boundary of a control — the edge IS
+   * the thing that tells you where the field is. `--border-default` is 1.39:1 on
+   * a card, which is fine for a decorative divider (WCAG exempts those) and
+   * essentially invisible on a checkbox.
+   *
+   * The contrast ratchet found this. Do not point a control at --border-default.
+   */
+  --border-strong: #6e7569; /* 3.77:1 on --bg-default — control boundaries */
   --border-emphasis: #454b42; /* focused inputs, emphasized outlines */
 
   /* ── Process canvas (Roadmap-27) ───────────────────────────────────
@@ -80,6 +96,15 @@
 
   /* ── Brand / Primary (playerz green) ───────────────────────────── */
   --brand-default: #22c55e; /* playerz green — brand accent, links (dark) */
+  /*
+   * The FOCUS RING. Its own token, deliberately.
+   *
+   * Overloading --brand-default would mean that making the ring visible enough
+   * (3:1, WCAG 1.4.11) also darkens every link on the site. A keyboard user who
+   * cannot see where they are cannot use the app at all — this is not a place to
+   * compromise for the sake of a link colour.
+   */
+  --focus-ring: #22c55e; /* 8.35:1 on --bg-page */
   --brand-emphasis: #16a34a; /* deeper green — primary buttons, active brand */
   --brand-muted: #4ade80; /* lighter green — hover accent */
   --brand-subtle: rgba(34, 197, 94, 0.18); /* green @ 18% — brand tint backgrounds */
@@ -649,8 +674,9 @@
   --content-inverted: #faf9f7; /* warm off-white — text on inverted/dark surfaces */
 
   /* ── Borders / Dividers ────────────────────────────────────────── */
-  --border-default: #e5e2de; /* warm gray — standard borders */
+  --border-default: #e5e2de; /* DECORATIVE dividers and card edges only */
   --border-subtle: rgba(229, 226, 222, 0.6); /* warm gray @ 60% — soft dividers */
+  --border-strong: #787b72; /* 3.99:1 on --bg-default — control boundaries (WCAG 1.4.11) */
   --border-emphasis: #c9c5be; /* medium warm gray — focused inputs */
 
   /* ── Process canvas (Roadmap-27) — light mirror ──────────────────
@@ -668,6 +694,11 @@
 
   /* ── Brand / Primary (playerz.bg-inspired orange) ──────────────────────── */
   --brand-default: #16a34a; /* playerz green (brand-500) — links, accents */
+  /*
+   * The focus ring is DARKER than the brand green in light mode. #16a34a is only
+   * 2.95:1 on the warm off-white page — it misses 3:1, and the ratchet caught it.
+   */
+  --focus-ring: #15803d; /* 4.48:1 on --bg-page */
   --brand-emphasis: #15803d; /* brand-600 — primary buttons, active (5.1:1 on white) */
   --brand-muted: #22c55e; /* lighter green — hover accent */
   --brand-subtle: rgba(22, 163, 74, 0.09); /* green @ 9% — brand tint backgrounds */

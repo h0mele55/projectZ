@@ -83,9 +83,19 @@ const config: Config = {
           attention: 'var(--content-attention)',
         },
 
+        // The focus ring. Its own token so that making it visible enough does not
+        // require darkening every link. See src/styles/tokens.css.
+        focus: {
+          ring: 'var(--focus-ring)',
+        },
+
         // ── Semantic border tokens ──
         border: {
           default: 'var(--border-default)',
+          // Control boundaries — inputs, checkboxes, radios, selects. WCAG 1.4.11
+          // requires 3:1 for the edge that identifies a control; --border-default
+          // is decorative and does not meet it. See src/styles/tokens.css.
+          strong: 'var(--border-strong)',
           subtle: 'var(--border-subtle)',
           emphasis: 'var(--border-emphasis)',
           success: 'var(--border-success)',
