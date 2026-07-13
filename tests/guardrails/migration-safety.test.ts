@@ -82,6 +82,12 @@ const PROTECTED: Protected[] = [
     why: 'a 0- or 6-star rating silently skews every average that includes it',
   },
   {
+    name: 'xp_event no-update trigger',
+    drop: /DROP TRIGGER\s+(?:IF EXISTS\s+)?"?xp_event_no_update/i,
+    recreate: /CREATE TRIGGER\s+"?xp_event_no_update/i,
+    why: 'an editable XP log cannot answer "why am I level 7?", and a clawback becomes a silent subtraction',
+  },
+  {
     name: 'ledger append-only trigger',
     drop: /DROP TRIGGER\s+(?:IF EXISTS\s+)?"?ledger_append_only/i,
     recreate: /CREATE TRIGGER\s+"?ledger_append_only/i,
