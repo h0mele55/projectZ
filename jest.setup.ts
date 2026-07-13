@@ -24,7 +24,7 @@ Object.assign(process.env, {
   // Moderation. Absent this, `classifyText` throws ModerationUnavailableError
   // and EVERY review would be queued — the tests would pass for entirely the
   // wrong reason, proving only that our outage path works.
-  OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? 'sk-test-moderation-dummy', // pragma: allowlist secret
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'sk-ant-test-dummy', // pragma: allowlist secret
 });
 
 export {};
