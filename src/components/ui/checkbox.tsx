@@ -26,7 +26,7 @@ import { Check2, Minus } from './icons';
 export const checkboxVariants = cva(
   [
     'peer shrink-0 rounded-md border transition-colors',
-    'bg-bg-default border-border-default text-content-inverted',
+    'bg-bg-default border-border-strong text-content-inverted',
     'hover:border-border-emphasis',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-default',
     'data-[state=checked]:bg-brand-emphasis data-[state=checked]:border-brand-emphasis',

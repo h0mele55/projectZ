@@ -19,7 +19,7 @@ import * as React from 'react';
 export const radioItemVariants = cva(
   [
     'aspect-square shrink-0 rounded-full border transition-colors',
-    'bg-bg-default border-border-default',
+    'bg-bg-default border-border-strong',
     'hover:border-border-emphasis',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-default',
     'data-[state=checked]:border-brand-emphasis data-[state=checked]:text-brand-emphasis',
