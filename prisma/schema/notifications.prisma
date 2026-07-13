@@ -1,0 +1,81 @@
+enum NotificationChannel {
+  IN_APP
+  PUSH
+  EMAIL
+}
+
+enum NotificationKind {
+  BOOKING_CONFIRMED
+  BOOKING_REMINDER
+  BOOKING_CANCELLED
+  SESSION_FULL
+  MESSAGE_RECEIVED
+  MATCH_RESULT
+  ACHIEVEMENT_UNLOCKED
+  TOURNAMENT_ROUND
+  PAYMENT_RECEIVED
+  SPLIT_REQUESTED
+}
+
+/// A browser's push endpoint.
+///
+/// One row per DEVICE, not per user — a person with a phone and a laptop has two,
+/// and a notification goes to both.
+model PushSubscription {
+  id     String @id @default(cuid())
+  userId String
+
+  /// The push service URL. Unique: the SAME browser re-subscribing must update
+  /// its row rather than accumulate a second one, or every notification is
+  /// delivered twice to the same device.
+  endpoint String @unique
+
+  /// The browser's public key and auth secret, used to ENCRYPT the payload.
+  /// Without them the push service could read every notification we send.
+  p256dh String
+  auth   String
+
+  userAgent String?
+
+  createdAt     DateTime  @default(now())
+  lastSuccessAt DateTime?
+  /// Consecutive failures. A push endpoint that has been failing for a long time
+  /// is a device that is gone — see `pruneDeadSubscriptions`.
+  failureCount  Int       @default(0)
+
+  @@index([userId])
+  @@map("push_subscription")
+}
+
+/// An in-app notification. The notification CENTRE is the source of truth;
+/// push is a delivery mechanism on top of it.
+///
+/// Same discipline as messaging (P15): PERSIST, THEN PUSH. A push that fires
+/// before the row exists shows the user something they cannot then find.
+model Notification {
+  id       String  @id @default(cuid())
+  tenantId String?
+
+  userId String
+  kind   NotificationKind
+
+  title String
+  body  String
+
+  /// Where tapping it goes.
+  href String?
+
+  /// What it is about, so the UI can group or supersede.
+  refType String?
+  refId   String?
+
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  /// The list query, exactly: one user's unread notifications, newest first.
+  @@index([userId, readAt, createdAt])
+  @@index([tenantId])
+  @@index([refType, refId])
+  @@map("notification")
+}
