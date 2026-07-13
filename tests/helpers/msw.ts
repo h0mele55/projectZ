@@ -82,6 +82,14 @@ export function setModerationClean() {
 }
 setModerationClean();
 
+/** What Strava returns from /athlete/activities next. */
+let stravaActivities: unknown[] = [];
+let stravaRefreshCount = 0;
+
+export function setStravaActivities(activities: unknown[]) {
+  stravaActivities = activities;
+}
+
 export const handlers = [
   // ── Stripe ────────────────────────────────────────────────────────
   http.post('https://api.stripe.com/v1/payment_intents', async ({ request }) => {
@@ -199,6 +207,27 @@ export const handlers = [
     });
   }),
 
+  // ── Strava ────────────────────────────────────────────────────────
+  http.post('https://www.strava.com/oauth/token', async ({ request }) => {
+    await record(request);
+    return HttpResponse.json({
+      // A fixed string returned by our own mock — no real Strava token exists in
+      // this repository.
+      access_token: 'strava_access_refreshed', // pragma: allowlist secret
+      // Strava ROTATES the refresh token on every refresh. A mock that returned
+      // the SAME one would let the "we forgot to store the new refresh token"
+      // bug pass every test — and in production the athlete would silently stop
+      // syncing on the second refresh.
+      refresh_token: `strava_refresh_${stravaRefreshCount++}`,
+      expires_at: Math.floor(Date.now() / 1000) + 21_600,
+    });
+  }),
+
+  http.get('https://www.strava.com/api/v3/athlete/activities', async ({ request }) => {
+    await record(request);
+    return HttpResponse.json(stravaActivities);
+  }),
+
   // ── Resend ────────────────────────────────────────────────────────
   http.post('https://api.resend.com/emails', async ({ request }) => {
     await record(request);
@@ -232,6 +261,7 @@ export function useMswServer() {
     recorded.length = 0;
     setHibpClean();
     setModerationClean();
+    stravaActivities = [];
   });
 
   afterAll(() => {

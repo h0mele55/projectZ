@@ -22,6 +22,25 @@ export async function asAppUser<T>(
   });
 }
 
+/**
+ * Bind to a tenant AND a user — the context Strava's owner-only RLS policy needs.
+ *
+ * A STRAVA-sourced activity is visible ONLY when app.user_id is its owner.
+ */
+export async function asAppUserAs<T>(
+  prisma: PrismaClient,
+  tenantId: string,
+  userId: string,
+  fn: (tx: PrismaClient) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, tenantId);
+    await tx.$executeRawUnsafe(`SELECT set_config('app.user_id', $1, true)`, userId);
+    await tx.$executeRawUnsafe(`SET LOCAL ROLE app_user`);
+    return fn(tx as unknown as PrismaClient);
+  });
+}
+
 /** BYPASSRLS. Migrations, background jobs, cross-tenant teardown. */
 export async function asAppSuperuser<T>(
   prisma: PrismaClient,
