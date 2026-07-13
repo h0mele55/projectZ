@@ -21,3 +21,4 @@ next-env.d.ts
 public/engine/stockfish.js
 public/engine/stockfish.wasm
 public/engine/LICENSE
+
