@@ -14,3 +14,10 @@ test-results/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Stockfish (GPL-3). Fetched by scripts/fetch-stockfish.sh, never committed —
+# a GPL-3 binary sitting in a proprietary repo invites exactly the confusion the
+# arms-length arrangement exists to avoid. See public/engine/README.md.
+public/engine/stockfish.js
+public/engine/stockfish.wasm
+public/engine/LICENSE

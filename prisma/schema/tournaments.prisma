@@ -1,0 +1,99 @@
+enum TournamentFormatKind {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+  SWISS
+}
+
+enum TournamentStatus {
+  DRAFT
+  REGISTRATION
+  IN_PROGRESS
+  COMPLETE
+  CANCELLED
+}
+
+model Tournament {
+  id       String @id @default(cuid())
+  tenantId String
+
+  name   String
+  sport  SportType
+  format TournamentFormatKind
+  status TournamentStatus     @default(DRAFT)
+
+  startsAt      DateTime
+  maxPlayers    Int
+  entryFeeCents Int      @default(0)
+
+  currentRound Int @default(0)
+  totalRounds  Int @default(0)
+
+  /// The pairing library's OWN serialised state, for SWISS only.
+  ///
+  /// `tournament-organizer` RANDOMISES its opening bracket, so the pairings
+  /// cannot be recomputed from the results — recomputing invents a DIFFERENT
+  /// tournament from the one that was played, and then applies real results to
+  /// fixtures that never existed. The state IS the record. See
+  /// src/lib/tournaments/swiss.ts.
+  stateJson Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries TournamentEntry[]
+  matches TournamentMatch[]
+
+  @@index([tenantId, status, startsAt])
+  @@index([tenantId])
+  @@map("tournament")
+}
+
+model TournamentEntry {
+  id           String @id @default(cuid())
+  tenantId     String
+  tournamentId String
+
+  playerUserId String
+  /// Seed weight at the moment of entry. Frozen: a player's live rating moving
+  /// mid-event must not re-seed a bracket that is already being played.
+  seedRating   Int?
+
+  withdrawnAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  /// One entry per player. Without it, a double-tapped "Enter" puts somebody in
+  /// the draw twice — and the bracket pairs them against themselves.
+  @@unique([tournamentId, playerUserId])
+  @@index([tenantId])
+  @@index([playerUserId])
+  @@map("tournament_entry")
+}
+
+model TournamentMatch {
+  id           String @id @default(cuid())
+  tenantId     String
+  tournamentId String
+
+  round Int
+
+  homeUserId String
+  /// NULL = a bye. Somebody has to sit out an odd round.
+  awayUserId String?
+
+  homeScore Float?
+  awayScore Float?
+
+  reportedAt DateTime?
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  /// A fixture exists once. A redelivered "report result" must not create a
+  /// second copy of the same game with a different score.
+  @@unique([tournamentId, round, homeUserId])
+  @@index([tenantId])
+  @@index([tournamentId, round])
+  @@map("tournament_match")
+}
