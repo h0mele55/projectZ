@@ -82,6 +82,12 @@ const PROTECTED: Protected[] = [
     why: 'a 0- or 6-star rating silently skews every average that includes it',
   },
   {
+    name: 'rating_engine_shape (CHECK)',
+    drop: /DROP\s+CONSTRAINT\s+"?rating_engine_shape/i,
+    recreate: /ADD CONSTRAINT\s+rating_engine_shape/i,
+    why: 'a Glicko row with no phi is uninterpretable, and an openskill row with one is the wrong shape entirely',
+  },
+  {
     name: 'xp_event no-update trigger',
     drop: /DROP TRIGGER\s+(?:IF EXISTS\s+)?"?xp_event_no_update/i,
     recreate: /CREATE TRIGGER\s+"?xp_event_no_update/i,
