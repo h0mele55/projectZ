@@ -311,8 +311,8 @@ describe('nothing is visible until it has been moderated', () => {
   it('a classifier OUTAGE queues the review — it does not publish it', async () => {
     // If an outage defaulted to publishing, the way to get anything onto the
     // site would be to attack our moderation provider.
-    const key = process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_API_KEY;
+    const key = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
 
     try {
       const booking = await seedBooking();
@@ -332,7 +332,7 @@ describe('nothing is visible until it has been moderated', () => {
       const c = await db.moderationCase.findFirstOrThrow({ where: { subjectId: r.id } });
       expect(c.reason).toBe('classifier_unavailable');
     } finally {
-      if (key !== undefined) process.env.OPENAI_API_KEY = key;
+      if (key !== undefined) process.env.ANTHROPIC_API_KEY = key;
     }
   });
 

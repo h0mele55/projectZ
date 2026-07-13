@@ -63,12 +63,22 @@ export function setHibpClean() {
  */
 let moderationScores: Record<string, number> = {};
 
+/**
+ * Tests write CANONICAL category names (`sexual/minors`), because that is the
+ * policy vocabulary and it is what they read as. The API cannot carry a slash
+ * in a tool property key, so the real response comes back with WIRE names
+ * (`sexual_minors`) — and the mock must emit what the real thing emits, or a
+ * test proves nothing about the parser.
+ */
+const TO_WIRE = (scores: Record<string, number>): Record<string, number> =>
+  Object.fromEntries(Object.entries(scores).map(([k, v]) => [k.replace(/[/-]/g, '_'), v]));
+
 export function setModerationScores(scores: Record<string, number>) {
-  moderationScores = scores;
+  moderationScores = TO_WIRE(scores);
 }
 
 export function setModerationClean() {
-  moderationScores = { harassment: 0.01, violence: 0.001, 'sexual/minors': 0.0001 };
+  moderationScores = TO_WIRE({ harassment: 0.01, violence: 0.001, 'sexual/minors': 0.0001 });
 }
 setModerationClean();
 
@@ -164,21 +174,26 @@ export const handlers = [
     });
   }),
 
-  // ── OpenAI moderation ─────────────────────────────────────────────
+  // ── Claude (moderation) ───────────────────────────────────────────
   //
-  // Clean by default. A test that wants a flag calls `setModerationScores`.
-  http.post('https://api.openai.com/v1/moderations', async ({ request }) => {
+  // Mirrors the real Messages API shape: the model answers with a `tool_use`
+  // content block, NOT with text. A mock that returned `{scores: {...}}` at the
+  // top level would let a parser bug — reading the wrong shape entirely — pass
+  // every test we have.
+  http.post('https://api.anthropic.com/v1/messages', async ({ request }) => {
     await record(request);
     return HttpResponse.json({
-      id: 'modr-test',
-      model: 'omni-moderation-latest',
-      results: [
+      id: 'msg_test',
+      type: 'message',
+      role: 'assistant',
+      model: 'claude-haiku-4-5-20251001',
+      stop_reason: 'tool_use',
+      content: [
         {
-          flagged: Object.values(moderationScores).some((s) => s >= 0.5),
-          categories: Object.fromEntries(
-            Object.entries(moderationScores).map(([k, v]) => [k, v >= 0.5]),
-          ),
-          category_scores: moderationScores,
+          type: 'tool_use',
+          id: 'toolu_test',
+          name: 'report_moderation_scores',
+          input: moderationScores,
         },
       ],
     });
