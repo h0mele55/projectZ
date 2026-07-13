@@ -400,7 +400,11 @@ describe('the performance dashboard', () => {
     // Their one win is still there, buried under ten more recent matches.
     expect(stats.wins).toBe(1);
     expect(stats.matchesPlayed).toBe(1);
-  });
+    // 20 users and 11 matches is genuinely a lot of round trips, and coverage
+    // instrumentation roughly doubles the time. The default 5s makes this test
+    // FLAKY under `--coverage` — and a test that fails at random is worse than no
+    // test, because it teaches people to re-run the build instead of reading it.
+  }, 30_000);
 
   it('an unplayed sport reports a fresh rating and a zero record, not a crash', async () => {
     const [a] = await seedUsers(1);

@@ -221,6 +221,11 @@ export const env = createEnv({
     VAPID_PRIVATE_KEY: z.string().optional(),
     VAPID_SUBJECT: z.string().optional(),
 
+    // The Prometheus scrape token. Optional — and when it is ABSENT the metrics
+    // endpoint returns 404 rather than serving. A missing secret must never mean
+    // "no security".
+    METRICS_TOKEN: z.string().optional(),
+
     // Stripe Billing
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
@@ -394,6 +399,7 @@ export const env = createEnv({
     VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY,
     VAPID_SUBJECT: process.env.VAPID_SUBJECT,
+    METRICS_TOKEN: process.env.METRICS_TOKEN,
     STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
     STRIPE_PRICE_ID_PRO: process.env.STRIPE_PRICE_ID_PRO,

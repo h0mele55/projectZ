@@ -158,6 +158,7 @@ const config = {
   // pg-error mapping; Glicko-2; the permission model; and the auth guards.
   // That is where a regression actually costs something, and it sits at ~88%.
   collectCoverageFrom: [
+    // ── Phase 1 ──
     'src/app-layer/usecases/**/*.ts',
     'src/app-layer/repositories/**/*.ts',
     'src/lib/db/**/*.ts',
@@ -166,6 +167,23 @@ const config = {
     'src/lib/permissions.ts',
     'src/lib/security/password-check.ts',
     'src/lib/security/route-permissions.ts',
+
+    // ── Phase 2 ──
+    //
+    // Added in P24. Every one of these is AUTHORED domain logic — money,
+    // ratings, brackets, moderation policy — and none of it was inside the
+    // coverage gate. A floor that only measures the code you wrote first is a
+    // floor that rises while the uncovered surface grows underneath it.
+    'src/lib/billing/**/*.ts',
+    'src/lib/gamification/**/*.ts',
+    'src/lib/ratings/**/*.ts',
+    'src/lib/tournaments/**/*.ts',
+    'src/lib/moderation/**/*.ts',
+    'src/lib/sports/**/*.ts',
+    'src/lib/wearables/**/*.ts',
+    'src/lib/push/**/*.ts',
+    'src/lib/design/contrast.ts',
+
     '!**/*.d.ts',
     '!**/index.ts',
   ],

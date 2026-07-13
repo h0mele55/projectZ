@@ -24,6 +24,24 @@ let _initialized = false;
 
 // ── Sensitive URL query params to redact ──
 
+/**
+ * Headers that must never reach Sentry.
+ *
+ * Compared LOWERCASE, because HTTP header names are case-insensitive and a
+ * client that sends `Authorization` (the conventional casing, and what every
+ * HTTP library emits) would otherwise sail straight past a lowercase key lookup
+ * — shipping the bearer token to a third party.
+ */
+const SENSITIVE_HEADERS = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'x-csrf-token',
+  'proxy-authorization',
+  'stripe-signature',
+]);
+
 const SENSITIVE_PARAMS = new Set([
   'code',
   'state',
@@ -63,6 +81,86 @@ function redactUrl(url: string): string {
  * Initialize Sentry SDK. Safe to call multiple times — only initializes once.
  * Noop when SENTRY_DSN is not set.
  */
+/**
+ * Strip everything that must never leave the building.
+ *
+ * ─── Why this is exported, and tested ────────────────────────────────
+ *
+ * A `beforeSend` buried in an init call is a function nobody ever runs. It looks
+ * right in review and it is never exercised, so a gap in it is discovered by an
+ * auditor reading our Sentry project — which is the worst possible way to find
+ * out that we have been shipping bearer tokens to a third party.
+ *
+ * So it is a pure function, and real events are run through it.
+ *
+ * ─── The bug that testing found ──────────────────────────────────────
+ *
+ * The original did `delete headers['authorization']`.
+ *
+ * HTTP HEADER NAMES ARE CASE-INSENSITIVE. A client that sends `Authorization`
+ * — which is the conventional casing, and what every HTTP library emits — sails
+ * straight past a lowercase key lookup, and the bearer token goes to Sentry.
+ *
+ * The delete "worked" in every test anybody had written, because those tests
+ * used lowercase keys.
+ */
+export function scrubEvent(
+  event: Sentry.ErrorEvent,
+  hint?: Sentry.EventHint,
+): Sentry.ErrorEvent | null {
+  const error = hint?.originalException;
+
+  // Expected control-flow "errors" from Next. Not incidents.
+  if (error instanceof Error) {
+    for (const pattern of IGNORED_ERROR_PATTERNS) {
+      if (error.message.includes(pattern) || error.name.includes(pattern)) {
+        return null;
+      }
+    }
+  }
+
+  if (event.request) {
+    if (event.request.headers) {
+      // CASE-INSENSITIVE. See the note above — this is the whole point.
+      const headers: Record<string, string> = {};
+      for (const [name, value] of Object.entries(event.request.headers)) {
+        if (SENSITIVE_HEADERS.has(name.toLowerCase())) continue;
+        headers[name] = value;
+      }
+      event.request.headers = headers;
+    }
+
+    // The body may contain anything — a password, a card, a whole review.
+    // Filtered wholesale rather than field by field: an allowlist of safe fields
+    // is a list somebody will add to.
+    if (event.request.data) event.request.data = '[Filtered]';
+    if (event.request.url) event.request.url = redactUrl(event.request.url);
+    if (event.request.query_string) event.request.query_string = '[Filtered]';
+
+    // The cookie header again, by its own name — some SDK versions hoist it out
+    // of `headers` into its own field, where the loop above never sees it.
+    if ('cookies' in event.request) {
+      (event.request as { cookies?: unknown }).cookies = undefined;
+    }
+  }
+
+  // Sentry attaches a user object. An id is fine and useful; an email or an IP
+  // is personal data we did not need in order to fix a stack trace.
+  if (event.user) {
+    event.user = { id: event.user.id };
+  }
+
+  if (event.breadcrumbs) {
+    for (const crumb of event.breadcrumbs) {
+      if (crumb.data?.url && typeof crumb.data.url === 'string') {
+        crumb.data.url = redactUrl(crumb.data.url);
+      }
+    }
+  }
+
+  return event;
+}
+
 export function initSentry(): void {
   if (_initialized) return;
 
@@ -77,52 +175,14 @@ export function initSentry(): void {
     environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'development',
     tracesSampleRate: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || '0'),
 
-    // Don't send expected / handled errors
-    beforeSend(event, hint) {
-      const error = hint?.originalException;
+    // The scrubber. Extracted so it can be TESTED with real events rather than
+    // trusted — see tests/unit/observability/sentry-scrubbing.test.ts.
+    beforeSend: scrubEvent,
 
-      // Skip Next.js internal navigation errors
-      if (error instanceof Error) {
-        for (const pattern of IGNORED_ERROR_PATTERNS) {
-          if (error.message.includes(pattern) || error.name.includes(pattern)) {
-            return null;
-          }
-        }
-      }
-
-      // Redact sensitive request data
-      if (event.request) {
-        if (event.request.headers) {
-          const headers = { ...event.request.headers };
-          delete headers['authorization'];
-          delete headers['cookie'];
-          delete headers['x-api-key'];
-          event.request.headers = headers;
-        }
-        // Never send full request body
-        if (event.request.data) {
-          event.request.data = '[Filtered]';
-        }
-        // Redact sensitive URL params
-        if (event.request.url) {
-          event.request.url = redactUrl(event.request.url);
-        }
-        if (event.request.query_string) {
-          event.request.query_string = '[Filtered]';
-        }
-      }
-
-      // Redact breadcrumb URLs
-      if (event.breadcrumbs) {
-        for (const crumb of event.breadcrumbs) {
-          if (crumb.data?.url && typeof crumb.data.url === 'string') {
-            crumb.data.url = redactUrl(crumb.data.url);
-          }
-        }
-      }
-
-      return event;
-    },
+    // Sentry will otherwise attach the user's IP address and, in some SDKs, their
+    // email — to EVERY event, without us ever writing a line of code. An error
+    // report is not consent to ship somebody's IP to a third party.
+    sendDefaultPii: false,
 
     // Ignore common noisy errors
     ignoreErrors: [
