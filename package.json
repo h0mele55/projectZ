@@ -71,7 +71,7 @@
     "driver.js": "^1.6.0",
     "glicko2": "^1.2.1",
     "ioredis": "^5.11.1",
-    "isomorphic-dompurify": "^2.19.0",
+    "isomorphic-dompurify": "^3.18.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.469.0",
     "maplibre-gl": "^5.0.1",
