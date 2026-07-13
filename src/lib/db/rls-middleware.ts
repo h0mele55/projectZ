@@ -82,10 +82,53 @@ export async function runInTenantContext<T>(
 }
 
 /**
+ * Bind a transaction to a tenant AND to the acting USER.
+ *
+ * `app.user_id` exists for one reason: STRAVA.
+ *
+ * Strava's API Agreement permits their data to be shown to the athlete it
+ * belongs to and to NOBODY ELSE — not another player, not a coach, not an
+ * aggregate. Tenant scoping cannot express that: everyone at a club shares a
+ * tenant. The boundary is per-ATHLETE, so the session has to carry who is
+ * asking.
+ *
+ * The RLS policy on `activity` makes a STRAVA row invisible to anyone but its
+ * owner. A buggy query that pulls activities into a leaderboard therefore
+ * returns ZERO ROWS rather than someone else's ride — the feature looks broken
+ * instead of quietly breaching a contract that would cost every connected
+ * athlete their integration.
+ *
+ * Use this for any request that may touch wearable data. See
+ * src/lib/wearables/strava-tos.ts.
+ */
+export async function runInUserContext<T>(
+  ctx: { tenantId: string; userId: string },
+  fn: (tx: PrismaClient) => Promise<T>,
+  client: PrismaClient = defaultPrisma,
+): Promise<T> {
+  if (!CUID_RE.test(ctx.tenantId)) throw new InvalidTenantIdError(ctx.tenantId);
+  if (!CUID_RE.test(ctx.userId)) throw new InvalidTenantIdError(ctx.userId);
+
+  return runWithTenantContext(ctx.tenantId, () =>
+    client.$transaction(async (tx) => {
+      // Both parameterised. Neither id is ever concatenated into SQL.
+      await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, ctx.tenantId);
+      await tx.$executeRawUnsafe(`SELECT set_config('app.user_id', $1, true)`, ctx.userId);
+      await tx.$executeRawUnsafe(`SET LOCAL ROLE app_user`);
+      return fn(tx as unknown as PrismaClient);
+    }),
+  );
+}
+
+/**
  * BYPASSRLS. Migrations, background jobs, cross-tenant admin.
  *
  * Deliberately verbose to call. Every use site should be obvious in review
  * — this is the one path that can read across tenant boundaries.
+ *
+ * NOTE: this bypasses the Strava owner-only policy too. It is for the IMPORTER
+ * (which writes rows on an athlete's behalf) and for deletion. It must never be
+ * used to READ Strava data for display.
  */
 export async function runAsSuperuser<T>(
   fn: (tx: PrismaClient) => Promise<T>,

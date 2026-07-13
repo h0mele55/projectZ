@@ -1,0 +1,100 @@
+enum ActivitySource {
+  /// RESTRICTED. Strava's API Agreement forbids cross-user display and any AI/ML
+  /// use. See src/lib/wearables/strava-tos.ts — this is a contract, not a
+  /// preference, and breaking it revokes our API key for every athlete at once.
+  STRAVA
+  /// The athlete typed it in themselves. Ours to display and to compute over.
+  MANUAL
+  APPLE_HEALTH
+  GARMIN
+}
+
+enum WearableProvider {
+  STRAVA
+  APPLE_HEALTH
+  GARMIN
+}
+
+/// An athlete's link to a wearable provider.
+///
+/// Tokens are ENCRYPTED at rest. A Strava access token is a key to a person's
+/// entire movement history — where they live, when they are out, the route they
+/// run alone at 6am. A leaked database that hands those over in plaintext is not
+/// a data breach, it is a stalking kit.
+model WearableConnection {
+  id     String @id @default(cuid())
+  userId String
+
+  provider WearableProvider
+
+  /// Encrypted. Never logged, never returned by an API.
+  accessTokenEnc  String
+  refreshTokenEnc String
+  expiresAt       DateTime
+
+  /// The provider's own id for this athlete, for webhook routing.
+  externalAthleteId String
+
+  scopes String[]
+
+  connectedAt  DateTime  @default(now())
+  lastSyncedAt DateTime?
+  /// Set when the athlete revokes us. Their data is DELETED, not hidden — see
+  /// the deauthorisation handler. This timestamp is all that remains.
+  revokedAt    DateTime?
+
+  /// One connection per provider per athlete. A second would mean two token
+  /// pairs racing to refresh each other, and whichever lost would start
+  /// returning 401s that look like the athlete revoked us.
+  @@unique([userId, provider])
+  @@unique([provider, externalAthleteId])
+  @@index([userId])
+  @@map("wearable_connection")
+}
+
+/// A run, a ride, a swim.
+///
+/// ─── The `source` column is a LEGAL boundary, not metadata ───────────
+///
+/// A STRAVA row and a MANUAL row may hold identical numbers and yet be entirely
+/// different things in what we are permitted to DO with them:
+///
+///   MANUAL — the athlete gave it to us. Display it, rank it, aggregate it.
+///   STRAVA — display it to its owner. Nothing else. No leaderboard, no feed,
+///            no aggregate, no model input.
+///
+/// This is enforced by an RLS policy (a STRAVA row is invisible to anyone but
+/// its owner), by a ratchet, and by src/lib/wearables/strava-tos.ts. Three
+/// layers, because a comment is not an enforcement mechanism.
+model Activity {
+  id       String  @id @default(cuid())
+  tenantId String?
+
+  userId String
+  source ActivitySource
+  sport  SportType
+
+  startedAt  DateTime
+  durationS  Int
+  distanceM  Int?
+  elevationM Int?
+
+  avgHeartRate Int?
+  calories     Int?
+
+  /// The provider's id, so a re-delivered webhook does not import twice.
+  externalId String?
+
+  createdAt DateTime @default(now())
+
+  /// IDEMPOTENCY. Strava's webhook is at-least-once, and a re-imported activity
+  /// would double an athlete's distance for the week.
+  @@unique([source, externalId])
+  // tenantId LEADS. RLS injects a tenantId predicate into every query whether
+  // the caller wrote it or not; a tenantId sitting second in a composite cannot
+  // serve it.
+  @@index([tenantId])
+  @@index([userId, sport, startedAt])
+  @@index([userId, source])
+  @@map("activity")
+}
