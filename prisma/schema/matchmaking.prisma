@@ -90,20 +90,121 @@ model SessionChatMessage {
 /// A player's Glicko-2 rating earned at one venue must carry to the next,
 /// otherwise matchmaking at a new club starts from zero and pairs a
 /// competitive player against a beginner.
+/// A player's rating for ONE sport, at ONE point in time.
+///
+/// Two engines live in this table, and their numbers are NOT comparable:
+///
+///   GLICKO2  (chess only) — mu ~1500, phi = rating deviation, sigma = volatility
+///   OPENSKILL (everything else) — mu ~25, sigma = uncertainty, NO phi
+///
+/// `engine` is stored on every row rather than looked up from the registry,
+/// because the registry can change and these rows cannot. A row written under
+/// Glicko-2 must still be readable as Glicko-2 in a year, even if the sport has
+/// since moved — otherwise the history renders as a cliff where a player's
+/// rating apparently collapsed from 1500 to 25 overnight.
 model SkillRatingHistory {
   id String @id @default(cuid())
 
   userId String
   sport  SportType
 
-  /// Glicko-2 state.
-  mu    Decimal @db.Decimal(6, 2)
-  phi   Decimal @db.Decimal(6, 2)
-  sigma Decimal @db.Decimal(6, 4)
+  /// Which engine produced these numbers. See the note above.
+  engine RatingEngine
+
+  mu    Decimal  @db.Decimal(8, 4)
+  /// Glicko-2 only. NULL for openskill, which has no phi — and a 0 here would
+  /// read as "perfectly certain", the exact opposite of what a missing value means.
+  phi   Decimal? @db.Decimal(8, 4)
+  sigma Decimal  @db.Decimal(8, 6)
+
+  /// The conservative, displayable number (mu - 3σ, or mu - 2·phi). Denormalised
+  /// so a leaderboard or a profile does not recompute it per row.
+  displayRating Decimal @db.Decimal(8, 2)
 
   matchesPlayed Int      @default(0)
   computedAt    DateTime @default(now())
 
   @@index([userId, sport, computedAt])
   @@map("skill_rating_history")
+}
+
+enum RatingEngine {
+  GLICKO2
+  OPENSKILL
+}
+
+/// A recorded result. The thing ratings are computed FROM.
+///
+/// Kept separate from OpenPlaySession: not every match happens in a session
+/// (a tournament round, a logged casual game), and a session can exist without
+/// anyone reporting who won.
+model MatchResultRecord {
+  id       String  @id @default(cuid())
+  tenantId String?
+
+  sport     SportType
+  sessionId String?
+
+  /// [[userId, ...], [userId, ...]] — teams, ordered BEST-FIRST.
+  teamsJson Json
+  /// Lower is better; equal values are a draw.
+  ranksJson Json
+
+  /// IDEMPOTENCY. A result reported twice must not rate the match twice —
+  /// ratings would move as if it had been played twice, which is the same class
+  /// of bug as double-awarding XP, and far harder to undo because a rating
+  /// update is not reversible by subtraction.
+  dedupeKey String @unique
+
+  reportedByUserId String?
+  recordedAt       DateTime @default(now())
+
+  participants MatchParticipant[]
+
+  @@index([tenantId, sport, recordedAt])
+  @@index([sessionId])
+  @@map("match_result")
+}
+
+enum MatchOutcome {
+  WIN
+  LOSS
+  DRAW
+}
+
+/// One player's participation in one match.
+///
+/// `teamsJson` on MatchResultRecord holds the SHAPE of the match. This holds the
+/// part we need to QUERY: "what is my record?".
+///
+/// Deriving that from the JSON instead means fetching every recent match and
+/// scanning it in JavaScript for the player's id — which is not merely slow, it
+/// is WRONG: any bound on that fetch (and there must be one) silently truncates
+/// a player's history to whichever matches happened to be in the window. A
+/// player whose games are older than the cut-off would be told they have no
+/// record.
+///
+/// The outcome is computed ONCE, at record time, from the ranks. A DRAW is
+/// "somebody shares my rank", not "I came first" — conflating them inflates the
+/// win rate of every player in a sport where draws are common.
+model MatchParticipant {
+  id      String @id @default(cuid())
+  matchId String
+
+  userId    String
+  sport     SportType
+  teamIndex Int
+  rank      Int
+  outcome   MatchOutcome
+
+  recordedAt DateTime @default(now())
+
+  match MatchResultRecord @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  /// A player appears in a match exactly once. The use case refuses a player on
+  /// both sides; this is the backstop.
+  @@unique([matchId, userId])
+  /// The dashboard's query, exactly: one player, one sport, most recent first.
+  @@index([userId, sport, recordedAt])
+  @@map("match_participant")
 }
