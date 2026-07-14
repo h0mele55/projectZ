@@ -92,6 +92,46 @@ const TYPE_TO_INPUTMODE: Record<string, React.HTMLAttributes<HTMLInputElement>['
   url: 'url',
 };
 
+/**
+ * The GO key on the on-screen keyboard.
+ *
+ * `enterKeyHint` changes the bottom-right key from a generic "return" to
+ * something that says what will actually happen: Search, Go, Send, Next, Done.
+ *
+ * It is invisible on a desktop and it is the difference, on a phone, between a
+ * user knowing that pressing that key will submit the form and a user not
+ * pressing it at all. The app-wide count before this change was ZERO.
+ */
+const TYPE_TO_ENTERKEYHINT: Record<string, React.HTMLAttributes<HTMLInputElement>['enterKeyHint']> =
+  {
+    search: 'search',
+    email: 'next',
+    tel: 'next',
+    url: 'go',
+  };
+
+/**
+ * Autofill.
+ *
+ * A password manager can only fill a field it can IDENTIFY, and `autoComplete`
+ * is how it does that. Without it the browser either offers nothing, or — worse —
+ * offers the wrong thing, and the user's saved password does not appear on the
+ * one screen where they needed it.
+ *
+ * The regression class is SILENT: nothing errors, nothing looks broken, the
+ * field simply never autofills and the user assumes the app is bad.
+ *
+ * This map covers what is DERIVABLE from `type`. A login form's
+ * `autoComplete="current-password"` versus a reset form's `"new-password"` is
+ * NOT derivable — the type is `password` in both — so those stay explicit, and
+ * tests/guardrails/auth-autofill.test.ts is what stops them being forgotten.
+ */
+const TYPE_TO_AUTOCOMPLETE: Record<string, string> = {
+  email: 'email',
+  tel: 'tel',
+  url: 'url',
+};
+
 type CvaInputProps = VariantProps<typeof inputVariants>;
 
 export interface InputProps
@@ -134,6 +174,25 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const derivedInputMode = TYPE_TO_INPUTMODE[type ?? ''];
     const inputMode = props.inputMode ?? derivedInputMode;
 
+    // The keyboard's action key. Explicit prop always wins.
+    const enterKeyHint = props.enterKeyHint ?? TYPE_TO_ENTERKEYHINT[type ?? ''];
+
+    // Autofill, where the type makes it unambiguous. `password` deliberately has
+    // NO default — current-password and new-password are the same input type and
+    // the wrong one is worse than none, because the browser will confidently fill
+    // a stale password into a "choose a new one" field.
+    const autoComplete = props.autoComplete ?? TYPE_TO_AUTOCOMPLETE[type ?? ''];
+
+    // Search hygiene.
+    //
+    // A phone capitalises the first letter of every field by default and runs a
+    // spellchecker over it. In a search box that means the user types "sofia",
+    // the phone sends "Sofia", and a red squiggle appears under a venue name that
+    // is spelled perfectly correctly. Neither is what anyone wants.
+    const isSearch = type === 'search';
+    const autoCapitalize = props.autoCapitalize ?? (isSearch ? 'none' : undefined);
+    const spellCheck = props.spellCheck ?? (isSearch ? false : undefined);
+
     const hasError = Boolean(error);
     const effectiveInvalid = invalid || hasError;
 
@@ -150,6 +209,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <input
             type={effectiveType}
             inputMode={inputMode}
+            enterKeyHint={enterKeyHint}
+            autoComplete={autoComplete}
+            autoCapitalize={autoCapitalize}
+            spellCheck={spellCheck}
             id={id}
             ref={ref}
             aria-invalid={effectiveInvalid || undefined}
