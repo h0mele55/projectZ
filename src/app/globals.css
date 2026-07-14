@@ -38,6 +38,22 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   background: var(--bg-page);
   color: var(--content-emphasis);
+
+  /* ── The horizontal-drift backstop ──────────────────────────────────
+   *
+   * The LAST line of defence, not the first. The first is
+   * tests/guardrails/no-horizontal-drift-patterns.test.ts, which bans the
+   * root-cause patterns at authoring time; the second is the mobile e2e drift
+   * spec, which measures scrollWidth on real pages.
+   *
+   * This is what stops a drift that got past both from FEELING like a broken
+   * app. Without it, a page one pixel too wide lets the browser rubber-band
+   * sideways and — on iOS — chain into the back-navigation gesture. The user
+   * swipes down a list, the page slides, and they land on the previous screen.
+   *
+   * It is one line, it is invisible when it works, and it is exactly the kind of
+   * thing somebody deletes while "cleaning up CSS". The guard locks it. */
+  overscroll-behavior-x: none;
 }
 
 /* List-page-shell document lock.

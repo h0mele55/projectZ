@@ -23,7 +23,29 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      // Desktop must not run the mobile specs — a drift assertion at 1280px is
+      // vacuously green.
+      testIgnore: /mobile\/.*\.spec\.ts$/,
+    },
+
+    /**
+     * The mobile project. Everything under tests/e2e/mobile/ runs HERE and only
+     * here.
+     *
+     * Pixel 5 is 393x851 — a real, common phone, and narrow enough that anything
+     * which drifts sideways will do so. Testing "mobile" at 768px proves nothing:
+     * that is a tablet, and it is wide enough to hide the bug.
+     */
+    {
+      name: 'mobile',
+      testMatch: /mobile\/.*\.spec\.ts$/,
+      use: { ...devices['Pixel 5'] },
+    },
+  ],
 
   // The public pages read real venues. Without a seed, `/venues` renders the
   // empty state and the specs would pass by asserting nothing — the classic
