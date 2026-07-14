@@ -54,7 +54,21 @@ const SOURCE = [...globSync('src/components/**/*.tsx'), ...globSync('src/app/**/
 
 interface Baseline {
   file: string;
-  line: number;
+  /**
+   * A distinctive fragment of the offending line — NOT a line number.
+   *
+   * The first version of this baseline pinned line numbers. It broke the moment
+   * an unrelated PR (P3, keyboard avoidance) added imports to popover.tsx: the
+   * separator moved from 265 to 293 and the guard declared its own baseline
+   * stale.
+   *
+   * A line-number baseline is invalidated by ANY edit above it, which means it
+   * fails on PRs that have nothing to do with it. That is the fastest way to
+   * teach people that this guard is noise.
+   *
+   * The content is stable; the line number is not.
+   */
+  match: string;
   reason: string;
 }
 
@@ -73,35 +87,35 @@ interface Baseline {
 const BASELINE: Baseline[] = [
   {
     file: 'src/components/ui/popover.tsx',
-    line: 265,
+    match: "cn('bg-border-subtle -mx-1 my-1 h-px', className)",
     reason:
       'Popover.Separator. The -mx-1 bleeds the divider to the edges of Popover.Menu, which carries p-1 (popover.tsx:186). Compensated by the parent, not the element.',
   },
   {
     file: 'src/components/ui/filter/filter-list.tsx',
-    line: 614,
+    match: 'border-border-subtle -mx-1 my-1 border-b',
     reason:
       'Command.Separator inside Command.List, which carries p-1 (filter-list.tsx:512). Same bleed-to-edge pattern.',
   },
   {
     file: 'src/components/ui/filter/filter-select.tsx',
-    line: 334,
+    match: 'border-border-subtle -mx-1 my-1 border-b',
     reason: 'Command.Separator in a p-1 menu list. Same bleed-to-edge pattern.',
   },
   {
     file: 'src/components/ui/filter/filter-select.tsx',
-    line: 374,
+    match: '-m-1 flex items-center justify-center',
     reason:
       '-m-1 on a flex centring wrapper for the loading state. It cancels the parent p-1 so the spinner is optically centred; it adds no width.',
   },
   {
     file: 'src/components/ui/combobox/index.tsx',
-    line: 674,
+    match: 'bg-border-subtle -mx-1 my-1 h-px',
     reason: 'Command.Separator in a p-1 menu list. Same bleed-to-edge pattern.',
   },
   {
     file: 'src/components/ui/table/table.tsx',
-    line: 121,
+    match: "'-mr-px',",
     reason:
       "The column-resize handle: a 1px hairline that is `absolute right-0`, so it is OUT OF FLOW and cannot widen its parent. It also sits inside the table's own overflow-x-auto context, so the 1px cannot reach the page. Baselined rather than exempting `absolute` wholesale — a blanket escape hatch would let a genuinely drifting absolute element through.",
   },
@@ -154,7 +168,7 @@ describe('no uncompensated negative margin', () => {
         if (COMPENSATING.test(line)) return;
         if (ICON_NUDGE.test(line)) return;
 
-        const baselined = BASELINE.some((b) => b.file === file && b.line === lineNo);
+        const baselined = BASELINE.some((b) => b.file === file && line.includes(b.match));
         if (baselined) return;
 
         violations.push(`${file}:${lineNo}\n      ${line.trim()}`);
@@ -178,19 +192,25 @@ describe('no uncompensated negative margin', () => {
     }
   });
 
-  it('every baseline entry still describes a real negative margin', () => {
-    // If the code was fixed but the exemption stayed, the exemption now excuses
-    // nothing — and would silently excuse a NEW violation on that line.
+  it('every baseline entry still matches a real negative margin', () => {
+    // If the code was fixed but the exemption stayed, the exemption excuses
+    // nothing — and is waiting to excuse whatever lands there next.
     for (const entry of BASELINE) {
-      const line = readFileSync(entry.file, 'utf8').split('\n')[entry.line - 1] ?? '';
+      const lines = readFileSync(entry.file, 'utf8').split('\n');
+      const hit = lines.find((l) => l.includes(entry.match));
 
-      if (!NEGATIVE_X_MARGIN.test(line)) {
+      if (!hit) {
         throw new Error(
-          `Stale baseline: ${entry.file}:${entry.line} no longer has a negative margin.\n\n` +
-            `  reason on file: ${entry.reason}\n` +
-            `  line now reads: ${line.trim()}\n\n` +
-            `Remove the entry. A stale exemption silently excuses whatever ends up on that\n` +
-            `line next.`,
+          `Stale baseline: ${entry.file} no longer contains \`${entry.match}\`.\n\n` +
+            `  reason on file: ${entry.reason}\n\n` +
+            `The code was changed but the exemption stayed. Remove it — a stale exemption\n` +
+            `is a hole waiting for something new to fall through.`,
+        );
+      }
+
+      if (!NEGATIVE_X_MARGIN.test(hit)) {
+        throw new Error(
+          `Stale baseline: ${entry.file} — \`${entry.match}\` no longer has a negative margin.`,
         );
       }
     }

@@ -53,6 +53,8 @@ import { useMediaQuery } from './hooks';
 import { ProgressiveBlur } from './progressive-blur';
 import { Tooltip } from './tooltip';
 import { Heading } from '@/components/ui/typography';
+import { keyboardAvoidanceStyle, useKeyboardInset } from '@/lib/hooks/use-keyboard-inset';
+import { OverlayDepthProvider } from './overlay-depth';
 
 // ─── Size variants ──────────────────────────────────────────────────
 
@@ -156,6 +158,12 @@ function ModalRoot({
   description,
   showCloseButton = true,
 }: ModalProps) {
+  // The soft keyboard covers the bottom of the screen. This overlay caps its
+  // height in `vh` — the LAYOUT viewport — which does not shrink when the
+  // keyboard opens, so any input near the bottom ends up BEHIND it. The user is
+  // typing into something they cannot see.
+  const keyboard = useKeyboardInset();
+
   const t = useTranslations('common');
   const router = useRouter();
   const { isMobile } = useMediaQuery();
@@ -202,6 +210,11 @@ function ModalRoot({
                 e.preventDefault();
               }
             }}
+            // KEYBOARD AVOIDANCE. `max-h-[92vh]` below is the LAYOUT viewport,
+            // which does not shrink when the soft keyboard opens — so the bottom
+            // of this sheet, and any input in it, ends up BEHIND the keyboard.
+            // This caps to what is actually visible. See use-keyboard-inset.ts.
+            style={keyboardAvoidanceStyle(keyboard)}
             className={cn(
               'fixed right-0 bottom-0 left-0 z-50 flex flex-col',
               // Mobile drawer shares the desktop modal's
@@ -218,7 +231,9 @@ function ModalRoot({
               data-modal-body-wrapper
               className="flex flex-1 flex-col overflow-hidden rounded-t-[10px] bg-inherit"
             >
-              {children}
+              {/* Mobile modal IS a drawer. A Combobox rendered in here must not
+                  open a second one. */}
+              <OverlayDepthProvider>{children}</OverlayDepthProvider>
             </div>
           </Drawer.Content>
         </Drawer.Portal>

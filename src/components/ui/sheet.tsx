@@ -31,6 +31,8 @@ import * as VisuallyHidden from '@radix-ui/react-visually-hidden';
 import { useMediaQuery } from './hooks';
 import { ProgressiveBlur } from './progressive-blur';
 import { Tooltip } from './tooltip';
+import { keyboardAvoidanceStyle, useKeyboardInset } from '@/lib/hooks/use-keyboard-inset';
+import { OverlayDepthProvider } from './overlay-depth';
 
 // ─── Size variants (desktop width) ──────────────────────────────────
 
@@ -88,6 +90,12 @@ function SheetRoot({
   overlayClassName,
   ...rest
 }: SheetRootProps) {
+  // The soft keyboard covers the bottom of the screen. This overlay caps its
+  // height in `vh` — the LAYOUT viewport — which does not shrink when the
+  // keyboard opens, so any input near the bottom ends up BEHIND it. The user is
+  // typing into something they cannot see.
+  const keyboard = useKeyboardInset();
+
   const t = useTranslations('common');
   const { isMobile } = useMediaQuery();
   const RootComponent = nested ? Drawer.NestedRoot : Drawer.Root;
@@ -146,6 +154,15 @@ function SheetRoot({
             {
               '--initial-transform': isSide ? 'calc(100% + 8px)' : 'calc(100% + 8px)',
               userSelect: 'auto',
+              // KEYBOARD AVOIDANCE, merged into the existing style rather than
+              // added as a second `style` prop (JSX takes the last one and
+              // silently drops the first — the bug would have been that the
+              // sheet's own transform vanished).
+              //
+              // The className above sizes with 85vh/100vh: the LAYOUT viewport,
+              // which does not shrink when the keyboard opens. Anything near the
+              // bottom of the sheet ends up behind it.
+              ...keyboardAvoidanceStyle(keyboard),
               ...contentProps?.style,
             } as React.CSSProperties
           }
@@ -161,7 +178,8 @@ function SheetRoot({
           >
             {fallbackTitle}
             {!isSide ? <DrawerHandle /> : null}
-            {children}
+            {/* A Sheet IS a drawer. Anything inside it is nested. */}
+            <OverlayDepthProvider>{children}</OverlayDepthProvider>
           </div>
         </Drawer.Content>
       </Drawer.Portal>
