@@ -179,7 +179,8 @@
       "tasks": "Tasks",
       "tests": "Tests",
       "vendors": "Vendors"
-    }
+    },
+    "scrollToTop": "Back to top"
   },
   "sports": {
     "TENNIS": "Tennis",

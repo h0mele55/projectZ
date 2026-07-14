@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { MobileListAffordances } from '@/components/mobile/MobileListAffordances';
 import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { listVenues } from '@/app-layer/repositories/venue';
@@ -32,7 +33,12 @@ export default async function VenuesPage({
   );
 
   return (
-    <main className="bg-bg-page text-content-default min-h-screen px-6 py-10">
+    <main className="bg-bg-page text-content-default safe-area-top safe-area-x min-h-screen px-6 py-10">
+      {/* Pull down to refresh; jump back to the top of a long list. Both are
+          client-only gestures, so they live in an island rather than dragging
+          this whole server component to the client. */}
+      <MobileListAffordances />
+
       <header className="mb-8">
         <h1 className="text-content-emphasis text-3xl font-semibold">Play</h1>
         <p className="text-content-muted mt-1 text-sm">
