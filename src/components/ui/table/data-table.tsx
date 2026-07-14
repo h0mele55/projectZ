@@ -55,7 +55,6 @@ export type { ColumnDef };
 export function createColumns<T>(
   columns: ColumnDef<T, any>[], // eslint-disable-line @typescript-eslint/no-explicit-any
 ): ColumnDef<T, any>[] {
-   
   return columns;
 }
 
@@ -64,6 +63,25 @@ export function createColumns<T>(
 export interface DataTableProps<T> {
   /** The data array to render. */
   data: T[];
+
+  /**
+   * What this table does on a phone.
+   *
+   * ─── The DEFAULT IS 'card', and that is the point ──────────────────
+   *
+   * An eight-column table at 390px does not fit, will not wrap, and pushes the
+   * whole PAGE sideways. So below `md` every DataTable collapses to a list of
+   * tappable cards, automatically, with no opt-in.
+   *
+   * This prop is therefore an ESCAPE HATCH, not a feature flag: a way to say
+   * "this table is genuinely desktop-only — let it scroll". It exists so that
+   * choice has to be MADE and WRITTEN DOWN, rather than happening by omission.
+   *
+   * `tests/guardrails/datatable-mobile-fallback.test.ts` requires any `'scroll'`
+   * to carry a comment saying why. The failure mode we are refusing is a table
+   * that horizontal-scrolls on a phone because nobody thought about it.
+   */
+  mobileFallback?: 'card' | 'scroll';
 
   /** TanStack column definitions. Use `createColumns<T>()` for type safety. */
   columns: ColumnDef<T, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -313,6 +331,7 @@ export const VIRTUALIZE_DEFAULT_THRESHOLD = 1000;
 export function DataTable<T>({
   data,
   columns,
+  mobileFallback,
   loading,
   error,
   emptyState,
@@ -506,9 +525,26 @@ export function DataTable<T>({
   // flex chain (max-h-full + flex flex-col + overflow-hidden) so
   // the inner card's max-h-full can resolve to a finite parent
   // height. NO flex-1 — see filledContainerClassName comment.
-  const wrapperClassName = fillBody
-    ? 'md:flex md:flex-col md:max-h-full md:min-h-0 md:overflow-hidden'
-    : undefined;
+  /**
+   * `min-w-0 max-w-full` is NOT cosmetic. It is what makes the table's own
+   * `overflow-x-auto` actually work.
+   *
+   * A child with overflow-x-auto still EXPANDS ITS PARENT unless the parent is
+   * allowed to be narrower than its content. Without these, this wrapper grows to
+   * fit an eight-column table, the wrapper pushes the page, and the document
+   * scrolls sideways — while the table's own scroll container sits there doing
+   * nothing, because there is nothing left to scroll.
+   *
+   * The mobile drift ratchet caught this the moment a DataTable was actually put
+   * on a page: /design-system scrolled 484px sideways at 393px. It affects every
+   * DataTable BEFORE HYDRATION (useIsBelowMd resolves false on the server, so the
+   * desktop table is what the phone first paints) and every table that opts out
+   * with mobileFallback="scroll".
+   */
+  const wrapperClassName = cn(
+    'min-w-0 max-w-full',
+    fillBody && 'md:flex md:flex-col md:max-h-full md:min-h-0 md:overflow-hidden',
+  );
 
   // Epic 68 — auto-virtualize above the threshold unless the caller
   // overrides. Virtualization is force-disabled when features
@@ -527,7 +563,12 @@ export function DataTable<T>({
   // resolves to `false` on SSR/first-render and under jsdom, so the desktop
   // table is the default everywhere except a real narrow viewport.
   const belowMd = useIsBelowMd();
-  if (belowMd && data.length > 0 && !error && !loading) {
+
+  // 'card' unless a caller has EXPLICITLY opted out. See the prop's doc: the
+  // default is the safe one, and opting out is the thing that must be justified.
+  const collapsesToCards = (mobileFallback ?? 'card') === 'card';
+
+  if (belowMd && collapsesToCards && data.length > 0 && !error && !loading) {
     return (
       <div id={dataTestId} data-testid={dataTestId} className={wrapperClassName}>
         <DataTableCards<T> table={table} onRowClick={onRowClick} />

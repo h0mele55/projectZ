@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CalendarMonth } from '@/components/ui/CalendarMonth';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DataTable, createColumns } from '@/components/ui/table/data-table';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CopyButton } from '@/components/ui/copy-button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -60,6 +61,51 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </section>
   );
 }
+
+interface DemoBooking {
+  id: string;
+  venue: string;
+  court: string;
+  sport: string;
+  starts: string;
+  player: string;
+  status: string;
+  price: string;
+}
+
+/** Eight columns — deliberately. A narrow table would not prove anything. */
+const DEMO_BOOKINGS: DemoBooking[] = [
+  {
+    id: 'bk_1',
+    venue: 'Sofia Padel Club',
+    court: 'Court 3',
+    sport: 'Padel',
+    starts: 'Sat 10:00',
+    player: 'Ivan Petrov',
+    status: 'Confirmed',
+    price: '24.00 EUR',
+  },
+  {
+    id: 'bk_2',
+    venue: 'Plovdiv Tennis Center',
+    court: 'Court 1',
+    sport: 'Tennis',
+    starts: 'Sun 18:30',
+    player: 'Maria Dimitrova',
+    status: 'Pending',
+    price: '18.00 EUR',
+  },
+];
+
+const BOOKING_COLUMNS = createColumns<DemoBooking>([
+  { accessorKey: 'venue', header: 'Venue' },
+  { accessorKey: 'court', header: 'Court' },
+  { accessorKey: 'sport', header: 'Sport' },
+  { accessorKey: 'starts', header: 'Starts' },
+  { accessorKey: 'player', header: 'Player' },
+  { accessorKey: 'status', header: 'Status' },
+  { accessorKey: 'price', header: 'Price' },
+]);
 
 export default function DesignSystemPage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -207,6 +253,25 @@ export default function DesignSystemPage() {
 
         <Section title="CalendarMonth">
           <CalendarMonth month={new Date('2026-07-01T00:00:00Z')} events={[]} />
+        </Section>
+
+        {/*
+         * DataTable was ABSENT from this page — which mattered more than it
+         * sounds. /design-system is the component-library drift canary that the
+         * mobile drift ratchet relies on (P1), and it was missing the single most
+         * drift-prone primitive in the library: a wide table.
+         *
+         * Below md this collapses to tappable cards automatically. That is what
+         * stops an eight-column table pushing the whole page sideways at 390px,
+         * and it is now actually exercised rather than merely asserted.
+         */}
+        <Section title="DataTable">
+          <DataTable<DemoBooking>
+            data={DEMO_BOOKINGS}
+            columns={BOOKING_COLUMNS}
+            resourceName={(plural) => (plural ? 'bookings' : 'booking')}
+            onRowClick={() => {}}
+          />
         </Section>
       </main>
     </TooltipProvider>
