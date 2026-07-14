@@ -95,7 +95,7 @@
     "stripe": "^22.3.0",
     "superjson": "^2.2.2",
     "swr": "^2.4.2",
-    "tailwind-merge": "^2.6.0",
+    "tailwind-merge": "^3.6.0",
     "tournament-organizer": "^4.1.1",
     "vaul": "^1.1.2",
     "web-push": "^3.6.7",
