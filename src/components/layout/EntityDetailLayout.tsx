@@ -34,11 +34,13 @@
  * prop) — useful for risks-style pages that stack sections instead.
  */
 
-import { type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 import { cardVariants } from '@/components/ui/card';
 
 import { cn } from '@/lib/cn';
+import { scrollBehavior, usePrefersReducedMotion } from '@/lib/hooks/use-reduced-motion';
+import { useSwipeNavigation } from '@/lib/hooks/use-swipe-navigation';
 import { type BreadcrumbItem } from '@/components/ui/breadcrumbs';
 import { PageHeader } from '@/components/layout/PageHeader';
 
@@ -177,6 +179,73 @@ export function EntityDetailLayout<TKey extends string = string>({
   rail,
 }: EntityDetailLayoutProps<TKey>) {
   const t = useTranslations('common');
+
+  const tabStripRef = useRef<HTMLElement | null>(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
+
+  /**
+   * BRING THE ACTIVE TAB INTO VIEW.
+   *
+   * The strip is `overflow-x-auto`, so with six tabs on a phone only the first
+   * two or three are visible. Deep-link to the fifth — which is exactly what a
+   * notification link or a shared URL does — and the user lands on a page whose
+   * selected tab is off-screen. The content is right and nothing on screen says
+   * why, so it reads as the wrong page.
+   *
+   * `inline: 'nearest'` scrolls the strip horizontally by the least amount that
+   * makes the tab visible. `block: 'nearest'` is the part people forget: without
+   * it the browser also scrolls the PAGE vertically to centre the tab, yanking
+   * the user away from the content they came to read.
+   */
+  useEffect(() => {
+    const strip = tabStripRef.current;
+    if (!strip || !activeTab) return;
+
+    const active = strip.querySelector<HTMLElement>(`#tab-${CSS.escape(String(activeTab))}`);
+    if (!active) return;
+
+    active.scrollIntoView({
+      inline: 'nearest',
+      block: 'nearest',
+      // A smooth scroll is the browser's own behaviour, NOT a CSS transition —
+      // the global prefers-reduced-motion override in globals.css cannot reach
+      // it. It would happily animate at a user who has asked it not to.
+      behavior: scrollBehavior(prefersReducedMotion),
+    });
+  }, [activeTab, prefersReducedMotion]);
+
+  /**
+   * SWIPE BETWEEN TABS.
+   *
+   * Native tab views page sideways; a web app that does not feels like a website
+   * with tabs drawn on it.
+   *
+   * The gesture is deliberately NOT claimed when it starts on a horizontally
+   * scrollable child — a wide table, a map. Otherwise the user cannot reach the
+   * columns of a table they can plainly see, because every attempt changes the
+   * tab instead. See use-swipe-navigation.ts.
+   */
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const tabIndex = tabs && activeTab ? tabs.findIndex((tab) => tab.key === activeTab) : -1;
+
+  const goToTab = (delta: number) => {
+    if (!tabs || tabIndex < 0 || !onTabChange) return;
+
+    // Do NOT wrap around. A swipe past the last tab landing on the first is
+    // disorienting: the user swipes "forward" and travels backwards through the
+    // whole strip. Native pagers stop at the ends, and so do we.
+    const next = tabs[tabIndex + delta];
+    if (!next || next.disabled) return;
+
+    onTabChange(next.key);
+  };
+
+  useSwipeNavigation(panelRef, {
+    enabled: Boolean(tabs && tabs.length > 1 && onTabChange),
+    onSwipeLeft: () => goToTab(1),
+    onSwipeRight: () => goToTab(-1),
+  });
   // v2-fu-4 — render the breadcrumbs / back link in EVERY state
   // (loading / error / empty / main). Previously the loading
   // skeleton, error block, and empty block returned early before
@@ -247,6 +316,7 @@ export function EntityDetailLayout<TKey extends string = string>({
       {/* Tab bar (optional) */}
       {tabs && tabs.length > 0 && (
         <nav
+          ref={tabStripRef}
           className="border-border-default flex gap-1 overflow-x-auto border-b"
           role="tablist"
           aria-label={t('table.detailSections')}
@@ -333,6 +403,7 @@ export function EntityDetailLayout<TKey extends string = string>({
         </div>
       ) : tabs && activeTab ? (
         <div
+          ref={panelRef}
           role="tabpanel"
           id={`tabpanel-${activeTab}`}
           aria-labelledby={`tab-${activeTab}`}

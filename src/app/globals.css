@@ -54,6 +54,19 @@ body {
    * It is one line, it is invisible when it works, and it is exactly the kind of
    * thing somebody deletes while "cleaning up CSS". The guard locks it. */
   overscroll-behavior-x: none;
+
+  /* ── …and the -y half, which pull-to-refresh depends on ─────────────
+   *
+   * The browser has its OWN pull-to-refresh. On Chrome for Android it will
+   * happily reload the entire page while ours is running — two refreshes, one of
+   * which throws the app away and starts again.
+   *
+   * `contain` stops the overscroll CHAINING to the browser without disabling
+   * scrolling itself. The alternative — calling preventDefault on touchmove —
+   * also kills normal scrolling and makes the page feel broken.
+   *
+   * usePullToRefresh is useless without this line. */
+  overscroll-behavior-y: contain;
 }
 
 /* List-page-shell document lock.
@@ -343,6 +356,18 @@ textarea.input {
 
 /* Safe-area support for notched devices */
 @supports (padding: env(safe-area-inset-bottom)) {
+  /* The notch / dynamic island. Only `-bottom` existed; a sticky header without
+     `-top` sits UNDER the status bar, and on a landscape phone the notch eats the
+     left or right edge of the content depending on which way you turn it. */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
   .safe-area-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
@@ -726,5 +751,63 @@ textarea.input {
   }
   .policy-content hr::after {
     display: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * ROUTE TRANSITIONS (View Transitions API).
+ *
+ * ~150ms. Long enough to read as motion, short enough that a user tapping
+ * quickly through a list never waits for it. A 300ms page transition is a
+ * transition you notice, and one you notice is one you resent by the tenth time.
+ *
+ * The slide is MOBILE ONLY: on a phone, forward navigation sliding in from the
+ * right matches every native app on the device. On a desktop, where navigation
+ * is not directional, a slide is just a wobble.
+ *
+ * There is no `prefers-reduced-motion` block here — src/lib/view-transition.ts
+ * refuses to start the transition at all in that case, because a view transition
+ * is a browser-level animation of a snapshot and the global CSS override in this
+ * file cannot reach it.
+ * ───────────────────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 150ms;
+  }
+}
+
+@media (max-width: 767px) {
+  ::view-transition-old(root) {
+    animation:
+      150ms cubic-bezier(0.4, 0, 0.2, 1) both vt-fade-out,
+      150ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-out;
+  }
+
+  ::view-transition-new(root) {
+    animation:
+      150ms cubic-bezier(0.4, 0, 0.2, 1) both vt-fade-in,
+      150ms cubic-bezier(0.4, 0, 0.2, 1) both vt-slide-in;
+  }
+}
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-slide-in {
+  from {
+    transform: translateX(12px);
+  }
+}
+@keyframes vt-slide-out {
+  to {
+    transform: translateX(-12px);
   }
 }
