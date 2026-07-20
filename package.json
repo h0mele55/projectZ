@@ -72,7 +72,7 @@
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.469.0",
     "maplibre-gl": "^5.0.1",
-    "meilisearch": "^0.47.0",
+    "meilisearch": "^0.59.0",
     "motion": "^12.42.2",
     "nanoid": "^5.0.9",
     "next": "16.2.10",
