@@ -1,0 +1,58 @@
+# playerz.bg on Fly.io
+#
+# ═══ WHY otp AND NOT fra ═══
+#
+# Bucharest is ~300km from Sofia; Frankfurt is ~1300km. The audience is
+# Bulgarian and the booking flow is chatty — availability, then a booking, then
+# a re-read — so the round trip is felt. Change `primary_region` if the
+# Postgres cluster ends up elsewhere: co-locating app and database matters more
+# than either one's distance to the user.
+
+app = "playerz-bg"
+primary_region = "otp"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# ═══ MIGRATIONS RUN BEFORE THE NEW VERSION GOES LIVE ═══
+#
+# `release_command` runs in a one-off machine against the new image and ABORTS
+# the deploy if it fails, so a bad migration never reaches a serving instance.
+# The Dockerfile deliberately has no migration step — doing it at container
+# start would race every replica against every other one.
+#
+# `migrate deploy` applies pending migrations and never generates or resets;
+# it is the only Prisma command safe to point at production.
+[deploy]
+  release_command = "npx prisma migrate deploy"
+  strategy = "rolling"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # One machine always up. Scale-to-zero adds a cold start to the first
+  # request, which on a booking page is the request that matters most.
+  min_machines_running = 1
+
+  # ═══ READINESS, NOT LIVENESS ═══
+  #
+  # /api/ready checks dependencies and returns 503 when they are down, so a
+  # machine with a broken database is taken OUT of rotation instead of serving
+  # errors. /api/health deliberately touches nothing — it answers 200 while
+  # Postgres is on fire, which is right for liveness and wrong here.
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "4s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/ready"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
